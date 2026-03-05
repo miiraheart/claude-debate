@@ -401,6 +401,7 @@ def format_debate_context(round_num: int, agent_id: int, mode: str = "product",
     state = get_state()
     out_path = Path(output_dir)
 
+    current_round_dir = None
     if mode == "topic":
         if round_num == 1:
             source_dir = out_path / "round-1"
@@ -408,6 +409,7 @@ def format_debate_context(round_num: int, agent_id: int, mode: str = "product",
             source_dir = out_path / f"round-{round_num - 1}"
         pattern = "agent-*.md"
         own_key = f"agent-{agent_id}"
+        current_round_dir = out_path / f"round-{round_num}"
     else:
         if round_num == 1:
             source_dir = SESSION_DIR / "phase2"
@@ -421,6 +423,11 @@ def format_debate_context(round_num: int, agent_id: int, mode: str = "product",
     if source_dir.exists():
         for f in sorted(source_dir.glob(pattern)):
             responses[f.stem] = f.read_text()
+
+    if current_round_dir is not None and round_num > 1 and current_round_dir.exists():
+        for f in sorted(current_round_dir.glob(pattern)):
+            if f.stem != own_key:
+                responses[f"current-{f.stem}"] = f.read_text()
 
     other_items = [(k, v) for k, v in responses.items()
                    if k != own_key and str(agent_id) not in k]
@@ -438,6 +445,7 @@ def format_debate_context(round_num: int, agent_id: int, mode: str = "product",
     )
 
     context_parts = [
+        f"You are in round {round_num} of the debate.\n\n",
         "These are the recent positions from other agents:\n",
     ]
 

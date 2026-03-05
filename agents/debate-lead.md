@@ -131,19 +131,25 @@ All agents have `Read`, `Bash`, `WebSearch`, and `WebFetch` tools. They can read
 
 ### 1.7 Spawn Debater Agents (parallel)
 
-Spawn all debaters in parallel — one Task call per agent:
+Spawn all debaters in parallel — one Task call per agent. **Use the role-specific agent type** based on the persona's adversarial role:
 
 ```
 For each persona (index N, 1-based):
+
+Determine subagent_type from persona role:
+  - "challenger" → "claude-debate:challenger"
+  - "defender"   → "claude-debate:defender"
+  - "balanced"   → "claude-debate:debater"
+
 Task(
-  subagent_type: "claude-debate:debater",
+  subagent_type: <SUBAGENT_TYPE>,
   name: "agent-<N>",
   team_name: "debate",
   prompt: "You are <PERSONA_NAME>: <PERSONA_DESCRIPTION>. Your stance: <PERSONA_STANCE>. Your adversarial role: <PERSONA_ROLE>. Follow your instructions exactly. Wait for assignments."
 )
 ```
 
-Where `<PERSONA_ROLE>` is one of `challenger`, `defender`, or `balanced` from the judge's assessment.
+This ensures challengers get the 6-dimension critique framework and defenders get the structured defense labeling framework.
 
 ### 1.8 Determine Round Count
 
@@ -472,7 +478,52 @@ python3 scripts/vote_tallier.py /tmp/debate-session/phase4/
 3. Cumulative vote weight across prior rounds
 4. Jury tiebreak (exit code 2 from vote_tallier)
 
-**If jury tiebreak (exit code 2):** Spawn champion agents for each tied product + a jury agent to decide. Then continue elimination.
+**If jury tiebreak (exit code 2):** Read `elimination-results.json` to get the `tied_products` list. Then:
+
+1. For each tied product, identify its champion agent (the agent who picked it in Phase 2)
+2. Send each champion a brief defense task (max 200 words):
+
+```
+SendMessage(
+  type: "message",
+  recipient: "<CHAMPION>",
+  summary: "Jury tiebreak: defend your pick",
+  content: """
+JURY TIEBREAK — Your product is tied for elimination.
+
+Tied products: <TIED_PRODUCTS>
+Write a 200-word defense of why your pick should NOT be eliminated.
+Focus on evidence, not rhetoric.
+
+Write to: /tmp/debate-session/phase4/tiebreak-defense-<PRODUCT>.md
+"""
+)
+```
+
+3. Send the judge a tiebreak ruling task:
+
+```
+SendMessage(
+  type: "message",
+  recipient: "judge",
+  summary: "Jury tiebreak: decide elimination",
+  content: """
+JURY TIEBREAK — These products are tied for elimination: <TIED_PRODUCTS>
+
+Read the tiebreak defenses at /tmp/debate-session/phase4/tiebreak-defense-*.md
+
+Decide which product to eliminate based on:
+1. Quality of evidence in the defense
+2. Overall debate performance
+3. Fit with the original query
+
+Write your decision to: /tmp/debate-session/phase4/tiebreak-ruling.md
+Include: ELIMINATE: [Product Name] and your reasoning.
+"""
+)
+```
+
+4. Parse the judge's ruling and continue elimination.
 
 Repeat elimination rounds until exactly 2 finalists remain.
 
@@ -645,6 +696,7 @@ SendMessage(
 ROUND 1 — OPENING POSITION
 
 Topic: <TOPIC>
+You are in round 1 of the debate. This is the opening round.
 Your persona: <PERSONA_NAME> — <PERSONA_DESCRIPTION>
 
 Present your opening position:
@@ -689,26 +741,34 @@ echo "[$(date '+%H:%M:%S')] ROUND — Round 1 complete. Issue tracker created." 
 
 ### Rounds 2 through N
 
-For each subsequent round R:
+For each subsequent round R, agents go **sequentially** (not parallel). This creates real adversarial clash — each agent responds to the latest output, not just the previous round.
 
-**Step 1 — Build per-agent context using the orchestrator:**
+**Ordering:** Challengers first → Defenders second → Balanced last. Within each group, order by agent number.
+
+Determine the ordering from the judge's persona list:
+1. Collect all agents with role `challenger` → sorted by agent number
+2. Collect all agents with role `defender` → sorted by agent number
+3. Collect all agents with role `balanced` → sorted by agent number
+4. Final order = challengers + defenders + balanced
+
+**For each agent in the sequential order:**
+
+**Step 1 — Build this agent's context:**
 
 ```bash
-For each agent-N:
 python3 scripts/debate_orchestrator.py format-debate-context <R> <N> --mode topic --output-dir debate-output
 ```
 
-This provides each agent with:
-- All other agents' prior positions (randomized order to prevent position bias)
+This provides the agent with:
+- All other agents' prior positions AND any already-submitted positions from this round (randomized order to prevent position bias)
 - Their own prior position for reference
 - The current issue tracker contents
 - Agreement intensity suffix (calibrated deference level)
 - Context budget management (prevents token overflow)
 
-**Step 2 — Send debate task to ALL agents (parallel):**
+**Step 2 — Send debate task to this agent (wait for response before next):**
 
 ```
-For each agent-N:
 SendMessage(
   type: "message",
   recipient: "agent-<N>",
@@ -717,6 +777,7 @@ SendMessage(
 ROUND <R>
 
 Topic: <TOPIC>
+You are in round <R> of the debate.
 Your persona: <PERSONA_NAME> — <PERSONA_DESCRIPTION>
 
 <FORMATTED_CONTEXT_FROM_ORCHESTRATOR>
@@ -732,6 +793,8 @@ Max 400 words.
 """
 )
 ```
+
+Wait for this agent to respond and write their file before proceeding to the next agent in the sequence. This ensures each agent can read and respond to positions submitted earlier in this same round.
 
 **Step 3 — Judge evaluates and updates tracker:**
 

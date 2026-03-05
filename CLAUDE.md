@@ -28,8 +28,10 @@ Multi-agent adversarial debate plugin using Team agents.
 | Agent | Role |
 |-------|------|
 | debate-lead | Orchestrator — manages lifecycle, rounds, output |
-| judge | Assesses complexity, evaluates arguments, fact-checks, issues rulings |
-| debater (×2-5) | Domain-specific debaters with tailored personas and adversarial roles (challenger/defender/balanced) |
+| judge | Assesses complexity, evaluates arguments, fact-checks with WebSearch/WebFetch, issues rulings |
+| challenger | Adversarial critic — 6-dimension critique framework, attacks positions, fact-checks opponents |
+| defender | Rigorous advocate — structured defense labeling (DEFENDED/NEEDS TIGHTENING/VULNERABLE) |
+| debater | Balanced role — equal critique and defense (used for balanced personas) |
 | synthesizer | Final report writer — product mode only, synthesizes debate evidence into recommendation |
 
 ## Configuration
@@ -40,6 +42,8 @@ Override models in your project's `.claude/settings.json`:
   "agent": {
     "debate-lead": { "model": "opus" },
     "judge": { "model": "opus" },
+    "challenger": { "model": "sonnet" },
+    "defender": { "model": "sonnet" },
     "debater": { "model": "sonnet" }
   }
 }
@@ -51,7 +55,7 @@ Override models in your project's `.claude/settings.json`:
 
 **Topic mode:**
 - Round 1: All agents present opening positions (parallel) → Judge evaluates, creates issue tracker
-- Round 2+: All agents see all positions → Judge updates tracker, can terminate early
+- Round 2+: Agents go **sequentially** (challengers → defenders → balanced) so each responds to latest output → Judge updates tracker, can terminate early
 - Final: Judge issues binding JUDGE'S RULING with per-issue verdicts, points of agreement, concessions, dismissed arguments, unresolved disagreements, and quality metrics
 
 ## Context Threading
@@ -84,8 +88,11 @@ debate-output/
 
 Agent instructions live in `agents/`:
 - `debate-lead.md` — orchestrator with full lifecycle management
-- `judge.md` — impartial arbiter, assessor, fact-checker, ruling authority
-- `debater.md` — shared debater instructions (personas injected at spawn)
+- `judge.md` — impartial arbiter, assessor, fact-checker with explicit verification protocol, ruling authority
+- `challenger.md` — adversarial critic with 6-dimension critique framework
+- `defender.md` — rigorous advocate with 5-dimension defense framework and structured labeling
+- `debater.md` — balanced debater for personas with equal critique/defense weight
+- `synthesizer.md` — final report writer (product mode only)
 
 ## Prerequisites
 

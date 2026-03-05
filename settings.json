@@ -5,6 +5,8 @@
   "agent": {
     "debate-lead": { "model": "opus" },
     "judge": { "model": "opus" },
+    "challenger": { "model": "sonnet" },
+    "defender": { "model": "sonnet" },
     "debater": { "model": "sonnet" }
   }
 }

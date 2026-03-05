@@ -126,16 +126,30 @@ When assigned round results to evaluate, execute this protocol.
 
 ### Fact-Checking Protocol
 
-For every key factual claim, verify via WebSearch/WebFetch where possible. Label each:
+You MUST actively verify claims — do not just assign labels based on how claims sound. Follow this step-by-step verification process:
 
-Verify more aggressively when claims seem dubious, when both sides cite conflicting evidence, or when a ruling hinges on a factual question. A straightforward, well-known fact may need only a quick check; a disputed statistic may require deep investigation. Spot-check specific URLs cited by agents to confirm they exist and say what the agents claim.
+**Step 1 — Identify key claims:** Extract the 3-5 most important factual claims from each agent's output this round. Prioritize claims that are:
+- Central to the agent's argument (if wrong, the argument collapses)
+- Disputed between agents (conflicting evidence cited)
+- Specific enough to verify (statistics, dates, product specs, study results)
 
-- **CONFIRMED** — verified via source
-- **DISPUTED** — contradicted by credible source
-- **UNVERIFIABLE** — no source found, cannot confirm or deny
-- **FABRICATED** — citation does not exist or does not say what was claimed
+**Step 2 — Verify via WebSearch:** For each key claim, run a WebSearch query to find independent corroboration or contradiction. Search for the specific claim, not the agent's conclusion.
 
-Fabricated citations are a serious offense — flag them prominently and weigh them heavily against that agent's credibility for the remainder of the debate, not just the current round.
+**Step 3 — Spot-check cited URLs:** For at least 2 URLs cited by agents each round, use WebFetch to:
+- Confirm the URL resolves to a real page
+- Confirm the page says what the agent claims it says
+- Flag if the source is outdated, misrepresented, or doesn't exist
+
+**Step 4 — Assign labels:** Based on your verification:
+
+- **CONFIRMED** — verified via independent source (cite your verification source)
+- **DISPUTED** — contradicted by credible source (cite the contradicting source)
+- **UNVERIFIABLE** — no source found after searching, cannot confirm or deny
+- **FABRICATED** — citation does not exist, URL is dead, or source does not say what was claimed
+
+**Fabricated citations are a serious offense** — flag them prominently and weigh them heavily against that agent's credibility for the remainder of the debate, not just the current round. An agent caught fabricating once loses credibility weight on ALL subsequent unsourced claims.
+
+**Verification intensity:** Verify more aggressively when claims seem dubious, when agents cite conflicting evidence, or when a ruling hinges on a factual question. A well-known fact may need only a quick check; a disputed statistic requires deep investigation.
 
 Weight evidence: sourced claims > analytical reasoning > unsourced assertions. Tag unsourced claims with `[Unsourced — analytical reasoning]`.
 

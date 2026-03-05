@@ -12,7 +12,6 @@ Reads all agent-*.md files in the directory. If a previous round exists
 """
 
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -204,14 +203,23 @@ def assess_convergence(round_dir: str) -> dict:
     if facilitator_score is not None:
         overall_convergence = facilitator_score
 
-    # Recommendation logic (from Mysti thresholds)
+    # Recommendation logic
+    # Primary authority: judge's facilitator score (qualitative assessment)
+    # Secondary: heuristic word-overlap metrics (backup signal only)
     recommendation = 'continue'
-    if facilitator_score is not None and facilitator_score >= 0.7:
-        recommendation = 'converged'
-    elif agreement_ratio >= 0.7 and avg_stability >= 0.8:
+    if facilitator_score is not None:
+        if facilitator_score >= 0.7:
+            recommendation = 'converged'
+        elif facilitator_score <= 0.3 and round_match and int(round_match.group(1)) >= 2:
+            prev_convergence_file = round_path.parent / f"convergence-round-{int(round_match.group(1)) - 1}.json"
+            if prev_convergence_file.exists():
+                prev_data = json.loads(prev_convergence_file.read_text())
+                prev_fac = prev_data.get("facilitator_score")
+                if prev_fac is not None and prev_fac <= 0.3:
+                    recommendation = 'stalled'
+    elif agreement_ratio >= 0.8 and avg_stability >= 0.85:
         recommendation = 'converged'
     elif round_match and int(round_match.group(1)) >= 2:
-        # Check for stalling: not improving + unstable
         prev_convergence_file = round_path.parent / f"convergence-round-{int(round_match.group(1)) - 1}.json"
         if prev_convergence_file.exists():
             prev_data = json.loads(prev_convergence_file.read_text())
