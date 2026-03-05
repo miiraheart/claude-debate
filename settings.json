@@ -1,0 +1,10 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "agent": {
+    "debate-lead": { "model": "opus" },
+    "judge": { "model": "opus" },
+    "debater": { "model": "sonnet" }
+  }
+}

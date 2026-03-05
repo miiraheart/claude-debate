@@ -1,0 +1,9 @@
+{
+  "name": "claude-debate",
+  "version": "1.0.0",
+  "description": "Multi-agent adversarial debate — dynamic team of 2-5 debaters argue any topic or research any product through structured rounds",
+  "author": { "name": "miiraheart", "url": "https://github.com/miiraheart" },
+  "repository": "https://github.com/miiraheart/claude-debate",
+  "license": "MIT",
+  "keywords": ["debate", "multi-agent", "adversarial", "team", "research", "product"]
+}
