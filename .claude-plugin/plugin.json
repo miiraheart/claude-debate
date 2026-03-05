@@ -5,5 +5,5 @@
   "author": { "name": "miiraheart", "url": "https://github.com/miiraheart" },
   "repository": "https://github.com/miiraheart/claude-debate",
   "license": "MIT",
-  "keywords": ["debate", "multi-agent", "adversarial", "team", "research", "product"]
+  "keywords": ["debate", "multi-agent", "adversarial", "argumentation", "team", "research", "product"]
 }

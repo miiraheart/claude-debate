@@ -31,12 +31,6 @@ Multi-agent adversarial debate plugin using Team agents.
 | judge | Assesses complexity, evaluates arguments, fact-checks, issues rulings |
 | debater (×2-5) | Domain-specific debaters with tailored personas |
 
-## Output
-
-- `debate-output/` — round files, issue tracker, debate log
-- `/tmp/debate-session/` — session state, phase files
-- Final output: synthesis.md (product) or Judge's Ruling (topic)
-
 ## Configuration
 
 Override models in your project's `.claude/settings.json`:
@@ -49,6 +43,48 @@ Override models in your project's `.claude/settings.json`:
   }
 }
 ```
+
+## Debate Flow
+
+**Product mode (6 phases):** Research → Opening Statements → Debate Rounds → Elimination → Finals → Synthesis
+
+**Topic mode:**
+- Round 1: All agents present opening positions (parallel) → Judge evaluates, creates issue tracker
+- Round 2+: All agents see all positions → Judge updates tracker, can terminate early
+- Final: Judge issues binding JUDGE'S RULING with per-issue verdicts, points of agreement, concessions, dismissed arguments, unresolved disagreements, and quality metrics
+
+## Context Threading
+
+The debate-lead threads context between rounds via:
+- **Issue tracker**: A running file (`issue-tracker.md`) in the output directory, updated after each round based on the judge's assessment. Tracks resolved, open, and stalled issues.
+- **Task descriptions**: Each round's task descriptions include the issue tracker contents and raw text of prior round outputs, so agents have full context without summarization bias.
+
+## Output
+
+Results are written to the output directory:
+
+```
+debate-output/
+  round-1/
+    agent-1.md
+    agent-2.md
+    ...
+  round-2/
+    ...
+  evaluations/
+    round-1.md
+    round-2.md
+  issue-tracker.md
+  final-ruling.md (topic) or final-report.md (product)
+  debate.log
+```
+
+## Agent Files
+
+Agent instructions live in `agents/`:
+- `debate-lead.md` — orchestrator with full lifecycle management
+- `judge.md` — impartial arbiter, assessor, fact-checker, ruling authority
+- `debater.md` — shared debater instructions (personas injected at spawn)
 
 ## Prerequisites
 
