@@ -29,7 +29,8 @@ Multi-agent adversarial debate plugin using Team agents.
 |-------|------|
 | debate-lead | Orchestrator — manages lifecycle, rounds, output |
 | judge | Assesses complexity, evaluates arguments, fact-checks, issues rulings |
-| debater (×2-5) | Domain-specific debaters with tailored personas |
+| debater (×2-5) | Domain-specific debaters with tailored personas and adversarial roles (challenger/defender/balanced) |
+| synthesizer | Final report writer — product mode only, synthesizes debate evidence into recommendation |
 
 ## Configuration
 

@@ -29,7 +29,6 @@ Usage:
 """
 
 import json
-import os
 import random
 import re
 import sys
@@ -190,7 +189,7 @@ def detect_domain(query: str) -> str:
     if not any(scores.values()):
         return "general"
 
-    return max(scores, key=scores.get)
+    return max(scores, key=lambda k: scores[k])
 
 
 def select_personas(domain: str) -> list[dict]:
@@ -219,6 +218,8 @@ def set_personas(personas_json: str) -> list[dict]:
         persona = {
             "name": p["name"],
             "description": p.get("description", ""),
+            "stance": p.get("stance", ""),
+            "role": p.get("role", "balanced"),
             "agent_id": p.get("agent_id", i + 1),
         }
         personas.append(persona)
@@ -383,30 +384,43 @@ def truncate_to_budget(text: str, max_chars: int) -> str:
     return result
 
 
-def format_debate_context(round_num: int, agent_id: int) -> str:
+def format_debate_context(round_num: int, agent_id: int, mode: str = "product",
+                          output_dir: str = "debate-output") -> str:
     """
     Format the full context an agent sees for a debate round.
     Dense topology: all agents see all other agents' responses.
     Adapted from debate-or-vote get_new_message() (analysis.md:322-383).
+
+    Works for both product mode (phase2/phase3 dirs in SESSION_DIR) and
+    topic mode (round-N dirs in output_dir).
 
     Context overflow management (from debatellm Innovation 5):
     Progressive truncation — preserve system prompt, trim oldest content first.
     Total context budget: MAX_CONTEXT_CHARS. Per-agent budget computed dynamically.
     """
     state = get_state()
+    out_path = Path(output_dir)
 
-    if round_num == 1:
-        source_dir = SESSION_DIR / "phase2"
-        pattern = "agent-*-opening.md"
-    else:
-        source_dir = SESSION_DIR / "phase3" / f"round-{round_num - 1}"
+    if mode == "topic":
+        if round_num == 1:
+            source_dir = out_path / "round-1"
+        else:
+            source_dir = out_path / f"round-{round_num - 1}"
         pattern = "agent-*.md"
+        own_key = f"agent-{agent_id}"
+    else:
+        if round_num == 1:
+            source_dir = SESSION_DIR / "phase2"
+            pattern = "agent-*-opening.md"
+        else:
+            source_dir = SESSION_DIR / "phase3" / f"round-{round_num - 1}"
+            pattern = "agent-*.md"
+        own_key = f"agent-{agent_id}" if round_num > 1 else f"agent-{agent_id}-opening"
 
     responses = {}
-    for f in sorted(source_dir.glob(pattern)):
-        responses[f.stem] = f.read_text()
-
-    own_key = f"agent-{agent_id}" if round_num > 1 else f"agent-{agent_id}-opening"
+    if source_dir.exists():
+        for f in sorted(source_dir.glob(pattern)):
+            responses[f.stem] = f.read_text()
 
     other_items = [(k, v) for k, v in responses.items()
                    if k != own_key and str(agent_id) not in k]
@@ -427,7 +441,7 @@ def format_debate_context(round_num: int, agent_id: int) -> str:
         "These are the recent positions from other agents:\n",
     ]
 
-    for key, response in other_items:
+    for _, response in other_items:
         truncated = truncate_to_budget(response, per_agent_budget)
         context_parts.append(f"One agent's position:\n```\n{truncated}\n```\n")
 
@@ -437,8 +451,12 @@ def format_debate_context(round_num: int, agent_id: int) -> str:
             f"This was your most recent position:\n```\n{own_truncated}\n```\n"
         )
 
-    # Include private channel notes if they exist
-    private_dir = SESSION_DIR / "phase3" / f"round-{round_num}" / "private"
+    # Include private channel notes if they exist (product mode)
+    if mode == "product":
+        private_dir = SESSION_DIR / "phase3" / f"round-{round_num}" / "private"
+    else:
+        private_dir = out_path / f"round-{round_num}" / "private"
+
     if private_dir.exists():
         private_files = sorted(private_dir.glob(f"*-to-agent-{agent_id}.md")) + \
                         sorted(private_dir.glob(f"agent-{agent_id}-to-*.md"))
@@ -447,6 +465,14 @@ def format_debate_context(round_num: int, agent_id: int) -> str:
             for pf in private_files:
                 note = truncate_to_budget(pf.read_text(), MIN_PER_AGENT_CHARS)
                 context_parts.append(f"```\n{note}\n```\n")
+
+    # Include issue tracker if it exists (topic mode gets this too now)
+    tracker_path = out_path / "issue-tracker.md"
+    if not tracker_path.exists():
+        tracker_path = SESSION_DIR / "issue-tracker.md"
+    if tracker_path.exists():
+        tracker_content = truncate_to_budget(tracker_path.read_text(), MAX_PER_AGENT_CHARS)
+        context_parts.append(f"\n## Issue Tracker (current state):\n```\n{tracker_content}\n```\n")
 
     intensity = state.get("agreement_intensity", DEFAULT_AGREEMENT_INTENSITY)
     suffix = AGREEMENT_INTENSITY.get(intensity, AGREEMENT_INTENSITY[DEFAULT_AGREEMENT_INTENSITY])
@@ -582,13 +608,17 @@ def format_private_pairs(round_num: int) -> list[dict]:
     return pairs
 
 
-def issue_tracker_init(topic: str) -> str:
+def issue_tracker_init(topic: str, output_dir: str | None = None) -> str:
     """
-    Initialize the issue tracker file for a debate session.
+    Initialize the issue tracker file.
 
-    Creates issue-tracker.md in the session directory with an empty
-    resolved/open/stalled structure.
+    Creates issue-tracker.md in output_dir (defaults to debate-output/ in cwd,
+    falling back to SESSION_DIR for backward compatibility).
     """
+    target_dir = Path(output_dir) if output_dir else Path("debate-output")
+    if not target_dir.exists():
+        target_dir = SESSION_DIR
+
     content = f"""# Issue Tracker
 
 **Topic**: {topic}
@@ -612,12 +642,12 @@ _None yet._
 
 _None yet._
 """
-    tracker_path = SESSION_DIR / "issue-tracker.md"
+    tracker_path = target_dir / "issue-tracker.md"
     tracker_path.write_text(content)
     return str(tracker_path)
 
 
-def issue_tracker_update(updates_json: str) -> str:
+def issue_tracker_update(updates_json: str, output_dir: str | None = None) -> str:
     """
     Update the issue tracker with new resolved/open/stalled lists.
 
@@ -631,10 +661,14 @@ def issue_tracker_update(updates_json: str) -> str:
     Rewrites the relevant sections of issue-tracker.md.
     """
     updates = json.loads(updates_json)
-    tracker_path = SESSION_DIR / "issue-tracker.md"
+    target_dir = Path(output_dir) if output_dir else Path("debate-output")
+    tracker_path = target_dir / "issue-tracker.md"
 
     if not tracker_path.exists():
-        return issue_tracker_init("(topic not set)")
+        tracker_path = SESSION_DIR / "issue-tracker.md"
+
+    if not tracker_path.exists():
+        return issue_tracker_init("(topic not set)", output_dir)
 
     existing = tracker_path.read_text()
 
@@ -737,7 +771,14 @@ if __name__ == "__main__":
     elif command == "format-debate-context":
         round_num = int(sys.argv[2])
         agent_id = int(sys.argv[3])
-        context = format_debate_context(round_num, agent_id)
+        ctx_mode = "product"
+        ctx_output_dir = "debate-output"
+        for i, arg in enumerate(sys.argv):
+            if arg == "--mode" and i + 1 < len(sys.argv):
+                ctx_mode = sys.argv[i + 1]
+            if arg == "--output-dir" and i + 1 < len(sys.argv):
+                ctx_output_dir = sys.argv[i + 1]
+        context = format_debate_context(round_num, agent_id, mode=ctx_mode, output_dir=ctx_output_dir)
         print(context)
 
     elif command == "assess-convergence":
@@ -776,18 +817,23 @@ if __name__ == "__main__":
 
     elif command == "issue-tracker":
         if len(sys.argv) < 3:
-            print("Usage: issue-tracker init 'Topic' | issue-tracker update '{json}'")
+            print("Usage: issue-tracker init 'Topic' [--output-dir path] | issue-tracker update '{json}' [--output-dir path]")
             sys.exit(1)
         subcommand = sys.argv[2]
+        out_dir = None
+        for i, arg in enumerate(sys.argv):
+            if arg == "--output-dir" and i + 1 < len(sys.argv):
+                out_dir = sys.argv[i + 1]
         if subcommand == "init":
-            topic = " ".join(sys.argv[3:])
-            path = issue_tracker_init(topic)
+            remaining = [a for i, a in enumerate(sys.argv[3:], 3) if a != "--output-dir" and (i == 0 or sys.argv[i - 1] != "--output-dir")]
+            topic = " ".join(remaining)
+            path = issue_tracker_init(topic, out_dir)
             print(json.dumps({"status": "created", "path": path}))
         elif subcommand == "update":
             if len(sys.argv) < 4:
                 print("Usage: issue-tracker update '{\"resolved\": [...], \"open\": [...], \"stalled\": [...]}'")
                 sys.exit(1)
-            path = issue_tracker_update(sys.argv[3])
+            path = issue_tracker_update(sys.argv[3], out_dir)
             print(json.dumps({"status": "updated", "path": path}))
         else:
             print(f"Unknown issue-tracker subcommand: {subcommand}")

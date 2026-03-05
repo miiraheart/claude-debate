@@ -67,17 +67,33 @@ Assess this query and return your recommendation as JSON.
 
 Query: <TOPIC>
 
-Return JSON with these fields:
+Return ONLY a raw JSON object (no markdown fences, no explanation) with these fields:
 - mode: "product" or "topic"
 - agent_count: integer (2-5)
-- personas: array of {name, description, stance}
-- round_count: integer
+- personas: array of {name, description, stance, role} where role is "challenger", "defender", or "balanced"
+- round_count: integer (2-5)
 - rationale: string explaining your recommendation
+
+At least one persona must have role "challenger" and at least one "defender".
 """
 )
 ```
 
 Parse the judge's JSON response. Extract: `mode`, `agent_count`, `personas`, `round_count`.
+
+**JSON parse fallback:** If the judge's response is not valid JSON (common with markdown wrapping or conversational preamble):
+1. Try extracting JSON from between ```json and ``` code fences
+2. Try extracting the first `{...}` block from the response
+3. If both fail, send a retry message to the judge:
+   ```
+   SendMessage(
+     type: "message",
+     recipient: "judge",
+     summary: "Retry: need valid JSON",
+     content: "Your assessment response was not valid JSON. Please respond with ONLY the JSON object — no markdown, no explanation, just the raw JSON with mode, agent_count, personas, round_count, and rationale fields."
+   )
+   ```
+4. If the retry also fails, use sensible defaults: `mode=topic`, `agent_count=3`, `round_count=3`, create generic personas (Proponent as defender, Critic as challenger, Analyst as balanced), and log the fallback.
 
 ### 1.4 Initialize Orchestrator State
 
@@ -123,9 +139,11 @@ Task(
   subagent_type: "claude-debate:debater",
   name: "agent-<N>",
   team_name: "debate",
-  prompt: "You are <PERSONA_NAME>: <PERSONA_DESCRIPTION>. Your stance: <PERSONA_STANCE>. Follow your instructions exactly. Wait for assignments."
+  prompt: "You are <PERSONA_NAME>: <PERSONA_DESCRIPTION>. Your stance: <PERSONA_STANCE>. Your adversarial role: <PERSONA_ROLE>. Follow your instructions exactly. Wait for assignments."
 )
 ```
+
+Where `<PERSONA_ROLE>` is one of `challenger`, `defender`, or `balanced` from the judge's assessment.
 
 ### 1.8 Determine Round Count
 
@@ -310,6 +328,33 @@ python3 scripts/debate_orchestrator.py format-debate-context <R> <N>
 
 Capture the formatted context string for each agent.
 
+**Step 1.5 — Private deliberation (rounds 2+ only):**
+
+Before the public debate round, run private critique exchanges between paired agents. This surfaces arguments agents might not raise publicly.
+
+```bash
+python3 scripts/debate_orchestrator.py format-private-pairs <R>
+```
+
+This returns agent pairings (round-robin, each agent paired with 1-2 others). For each pair (agent-A, agent-B), send private critique tasks in parallel:
+
+```
+SendMessage(
+  type: "message",
+  recipient: "agent-<A>",
+  summary: "Private critique of agent-<B>'s position",
+  content: """
+PRIVATE DELIBERATION — Round <R>
+
+Read agent-<B>'s most recent position. Write a private critique (max 150 words) focusing on their single weakest argument. Be direct — this is private, not public.
+
+Write to: /tmp/debate-session/phase3/round-<R>/private/agent-<A>-to-agent-<B>.md
+"""
+)
+```
+
+Wait for all private critiques. These files are automatically included in each agent's formatted context by the orchestrator.
+
 **Step 2 — Send debate tasks (parallel):**
 
 ```
@@ -334,7 +379,40 @@ Write to: debate-output/phase3/round-<R>/agent-<N>.md
 )
 ```
 
-**Step 3 — Assess convergence:**
+**Step 3 — Facilitator summary + convergence assessment:**
+
+After each debate round, ask the judge to produce a Delphi facilitator summary. This provides a structured convergence signal that overrides heuristic detection when available.
+
+```
+SendMessage(
+  type: "message",
+  recipient: "judge",
+  summary: "Facilitator summary for round <R>",
+  content: """
+Review all agents' positions from round <R> at debate-output/phase3/round-<R>/ and produce a facilitator summary:
+
+## Consensus Points
+- **Strong confidence**: [points all agents agree on]
+- **Moderate confidence**: [points most agents agree on]
+- **Tentative**: [points with slight majority]
+
+## Divergence Points
+- **Position A**: [description] — held by [agents]
+- **Position B**: [description] — held by [agents]
+- **Key tension**: [what drives the disagreement]
+
+## Open Questions
+- [evidence gaps or unresolved points]
+
+## Convergence Score: ?/10
+(0 = total disagreement, 5 = split positions, 7 = emerging consensus, 10 = full agreement)
+
+Write to: /tmp/debate-session/phase3/round-<R>/facilitator-summary.md
+"""
+)
+```
+
+Then run convergence assessment (which reads the facilitator score if available):
 
 ```bash
 python3 scripts/debate_orchestrator.py assess-convergence <R>
@@ -385,7 +463,7 @@ Write to: /tmp/debate-session/phase4/vote-agent-<N>.md
 After all votes:
 
 ```bash
-python3 vote_tallier.py /tmp/debate-session/phase4/
+python3 scripts/vote_tallier.py /tmp/debate-session/phase4/
 ```
 
 **Tiebreak sequence (follow strictly — do not override with manual judgment):**
@@ -613,7 +691,19 @@ echo "[$(date '+%H:%M:%S')] ROUND — Round 1 complete. Issue tracker created." 
 
 For each subsequent round R:
 
-**Step 1 — Gather prior positions** (all prior round outputs)
+**Step 1 — Build per-agent context using the orchestrator:**
+
+```bash
+For each agent-N:
+python3 scripts/debate_orchestrator.py format-debate-context <R> <N> --mode topic --output-dir debate-output
+```
+
+This provides each agent with:
+- All other agents' prior positions (randomized order to prevent position bias)
+- Their own prior position for reference
+- The current issue tracker contents
+- Agreement intensity suffix (calibrated deference level)
+- Context budget management (prevents token overflow)
 
 **Step 2 — Send debate task to ALL agents (parallel):**
 
@@ -629,15 +719,7 @@ ROUND <R>
 Topic: <TOPIC>
 Your persona: <PERSONA_NAME> — <PERSONA_DESCRIPTION>
 
-Current issue tracker:
----
-<ISSUE_TRACKER_CONTENTS>
----
-
-All prior positions from round <R-1> (raw — do not summarize):
----
-<PRIOR_ROUND_POSITIONS>
----
+<FORMATTED_CONTEXT_FROM_ORCHESTRATOR>
 
 Your task:
 1. Respond to the strongest argument made against your position
@@ -899,20 +981,21 @@ Max 400 words.
 ### Judge Assessment (Standard)
 
 ```
-Assess this query and return your recommendation as JSON.
+Assess this query and return ONLY a raw JSON object (no markdown fences, no explanation):
 
 Query: <TOPIC>
 
-Return JSON:
 {
   "mode": "product" or "topic",
   "agent_count": <integer 2-5>,
   "personas": [
-    {"name": "<name>", "description": "<role description>", "stance": "<initial stance or lens>"}
+    {"name": "<name>", "description": "<role description>", "stance": "<initial stance or lens>", "role": "challenger|defender|balanced"}
   ],
-  "round_count": <integer>,
+  "round_count": <integer 2-5>,
   "rationale": "<why this configuration>"
 }
+
+At least one persona must have role "challenger" and at least one "defender".
 ```
 
 ### Judge Assessment (Final Round — Topic Mode)
