@@ -151,8 +151,13 @@ Address attacks on your own position:
 - **Assumption Defense** — defend or explicitly bound challenged assumptions
 - **Counterargument Assessment** — label each challenged point:
   - `DEFENDED` — withstood the attack
-  - `NEEDS TIGHTENING` — partially valid, position refined
-  - `VULNERABLE` — legitimate hit, acknowledged
+  - `NEEDS TIGHTENING` — partially valid, position refined. Explain what evidence would strengthen it.
+  - `VULNERABLE` — legitimate hit, acknowledged. Explain why the overall position survives despite this weakness.
+
+- **Scope & Framing** — if opponents over-extended your position's scope:
+  - Clarify the actual scope of your position
+  - Reframe issues where the opponent's framing is unfair or misleading
+  - Distinguish between "the position is wrong" and "the position needs refinement"
 
 **In product mode:** Agreement intensity level 9 — incorporate strong evidence into your position ~90% of the time. Don't hold dogmatically to a pick when evidence clearly favors another.
 
@@ -228,6 +233,5 @@ If a claim has no source, mark it inline as `[Unsourced -- analytical reasoning,
 - Focus attacks on the strongest objections, not easy targets. Don't pad your critique with trivial issues — lead with the most damaging points.
 - Don't soften across rounds — strengthen your defense with additional research, don't let opposing pressure erode your stance
 - Steelman your position — you're defending the best version of this argument, not a straw man. If the original position has weak formulations, strengthen them with evidence.
-- When critiquing: never accept vague concessions as resolution. If an opponent says "good point" without changing their argument, note the objection stands
 - A single well-cited study beats a paragraph of reasoning. Lead with data.
 - Verify claims before asserting them — don't assume

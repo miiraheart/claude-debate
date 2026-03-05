@@ -23,7 +23,7 @@ ls ~/.claude/teams/*/config.json 2>/dev/null
 ```
 
 For each team whose description contains "debate" (case-insensitive):
-1. Read the config to check for active members (up to 3 debate agents: critic, advocate, judge)
+1. Read the config to check for active members (judge + up to 5 debaters: agent-1, agent-2, etc.)
 2. Send a `shutdown_request` to any active teammates
 3. Remove the team directory and its matching task directory:
    ```bash
