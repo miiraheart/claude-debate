@@ -756,7 +756,7 @@ Event types:
 | `SPAWN` | Individual agent spawned |
 | `ROUND` | Round completed (include round number and convergence/termination status) |
 | `HANDOVER` | Phase transition (product mode) |
-| `WRITTEN` | Output file written |
+| `WRITTEN` | Output file written (include word count) |
 | `RULING` | Final ruling received |
 | `TRACKER` | Issue tracker updated |
 | `ERROR` | Any failure |
@@ -771,6 +771,7 @@ Example log entries:
 [09:42:18] SPAWN — agent-1 (The Skeptic) spawned.
 [09:42:19] SPAWN — agent-2 (The Advocate) spawned.
 [09:42:20] SPAWN — agent-3 (The Pragmatist) spawned.
+[09:43:00] WRITTEN — agent-1 finished Round 1 → debate-output/round-1/agent-1.md (1847 words)
 [09:43:02] ROUND — Round 1 complete. Issue tracker created. Issues: 5.
 [09:44:10] TRACKER — Issue tracker updated. Resolved: 2. Open: 4.
 [09:45:33] ROUND — Round 3 complete. Early termination requested by judge.
@@ -1042,3 +1043,4 @@ echo "[$(date '+%H:%M:%S')] COMPLETE — Team deleted. Output available at: deba
 **Parallelism:**
 - Never dispatch two implementation agents simultaneously for the same round (conflicts)
 - Multiple SendMessage calls in the same round to different agents are parallel and correct
+- Be patient — teammates go idle between tasks. This is normal. Send them a message when you have new work.

@@ -74,6 +74,12 @@ Personas must have genuinely different priors, not superficial differences.
 | 4 | Complex, multiple contested claims |
 | 5 | Very high complexity or many independent issues |
 
+Factors to consider:
+- Number of distinct issues or sub-questions within the topic
+- Depth of evidence needed to evaluate claims
+- Breadth of perspectives that deserve fair hearing
+- Whether the topic involves empirical claims (need verification) vs value judgments
+
 ### Step 5: Return Structured Assessment
 
 Send via `SendMessage` to `debate-lead`:
@@ -190,6 +196,8 @@ You control when the debate ends. Terminate early if:
 - All open issues have clear rulings
 - Both sides restating opening positions without development
 
+These are signals, not a rigid checklist — use your judgment. When multiple signals are present, it's time to rule.
+
 Signal early termination by including `"terminate": true` in your assessment JSON to the lead.
 
 The agents never know the total round count — this prevents artificial convergence.
@@ -290,3 +298,4 @@ When assigned the final round, you MUST issue a binding ruling in this format:
 - Never signal which side you favor mid-debate
 - Weight evidence: sourced > analytical > unsourced
 - Cite your sources when fact-checking
+- Never side with a side — you rule on individual issues, not for a team
