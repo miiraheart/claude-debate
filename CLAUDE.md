@@ -44,7 +44,8 @@ Override models in your project's `.claude/settings.json`:
     "judge": { "model": "opus" },
     "challenger": { "model": "sonnet" },
     "defender": { "model": "sonnet" },
-    "debater": { "model": "sonnet" }
+    "debater": { "model": "sonnet" },
+    "synthesizer": { "model": "sonnet" }
   }
 }
 ```

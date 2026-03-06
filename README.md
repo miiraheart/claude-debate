@@ -94,13 +94,16 @@ User: /claude-debate:start "query"
 
 ## Configuration
 
-Default: Opus for lead+judge, Sonnet for debaters. Override in `.claude/settings.json`:
+Default: Opus for lead+judge, Sonnet for debaters+synthesizer. Override in `.claude/settings.json`:
 ```json
 {
   "agent": {
     "debate-lead": { "model": "opus" },
     "judge": { "model": "opus" },
-    "debater": { "model": "sonnet" }
+    "challenger": { "model": "sonnet" },
+    "defender": { "model": "sonnet" },
+    "debater": { "model": "sonnet" },
+    "synthesizer": { "model": "sonnet" }
   }
 }
 ```
@@ -111,9 +114,12 @@ Default: Opus for lead+judge, Sonnet for debaters. Override in `.claude/settings
 claude-debate/
 ├── .claude-plugin/plugin.json
 ├── agents/
-│   ├── debate-lead.md
-│   ├── debater.md
-│   └── judge.md
+│   ├── debate-lead.md        # Orchestrator — manages lifecycle, rounds, output
+│   ├── judge.md              # Impartial arbiter, fact-checker, ruling authority
+│   ├── challenger.md         # Adversarial critic — 6-dimension critique framework
+│   ├── defender.md           # Rigorous advocate — structured defense labeling
+│   ├── debater.md            # Balanced role — equal critique and defense
+│   └── synthesizer.md        # Final report writer (product mode only)
 ├── skills/
 │   ├── start/SKILL.md
 │   └── cleanup/SKILL.md

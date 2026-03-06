@@ -45,6 +45,8 @@ def _resolve_session_dir() -> Path:
         return SYMLINK_PATH.resolve()
     if SYMLINK_PATH.is_dir():
         return SYMLINK_PATH
+    print("WARNING: No active debate session found at /tmp/debate-session. "
+          "Run 'init' first or ensure debate-output/ exists.", file=sys.stderr)
     return DEBATE_BASE / "no-session"
 
 
@@ -307,12 +309,14 @@ def _is_fuzzy_match(a: str, b: str) -> bool:
     return overlap >= 0.7
 
 
-def check_duplicates() -> dict:
+def check_duplicates(output_dir: str = "debate-output") -> dict:
     """Check Phase 2 opening statements for duplicate product picks.
     Uses fuzzy matching to catch near-duplicates like
     'Sony WH-1000XM5' vs 'Sony WH-1000XM5 Headphones'."""
-    phase2_dir = SESSION_DIR / "phase2"
-    files = sorted(phase2_dir.glob("agent-*-opening.md"))
+    phase2_dir = Path(output_dir) / "phase2"
+    if not phase2_dir.exists():
+        phase2_dir = SESSION_DIR / "phase2"
+    files = sorted(phase2_dir.glob("agent-*.md"))
 
     sys.path.insert(0, str(Path(__file__).parent))
     from convergence_detector import extract_position
@@ -412,12 +416,16 @@ def format_debate_context(round_num: int, agent_id: int, mode: str = "product",
         current_round_dir = out_path / f"round-{round_num}"
     else:
         if round_num == 1:
-            source_dir = SESSION_DIR / "phase2"
-            pattern = "agent-*-opening.md"
-        else:
-            source_dir = SESSION_DIR / "phase3" / f"round-{round_num - 1}"
+            source_dir = out_path / "phase2"
+            if not source_dir.exists():
+                source_dir = SESSION_DIR / "phase2"
             pattern = "agent-*.md"
-        own_key = f"agent-{agent_id}" if round_num > 1 else f"agent-{agent_id}-opening"
+        else:
+            source_dir = out_path / "phase3" / f"round-{round_num - 1}"
+            if not source_dir.exists():
+                source_dir = SESSION_DIR / "phase3" / f"round-{round_num - 1}"
+            pattern = "agent-*.md"
+        own_key = f"agent-{agent_id}"
 
     responses = {}
     if source_dir.exists():
@@ -459,9 +467,11 @@ def format_debate_context(round_num: int, agent_id: int, mode: str = "product",
             f"This was your most recent position:\n```\n{own_truncated}\n```\n"
         )
 
-    # Include private channel notes if they exist (product mode)
+    # Include private channel notes if they exist
     if mode == "product":
-        private_dir = SESSION_DIR / "phase3" / f"round-{round_num}" / "private"
+        private_dir = out_path / "phase3" / f"round-{round_num}" / "private"
+        if not private_dir.exists():
+            private_dir = SESSION_DIR / "phase3" / f"round-{round_num}" / "private"
     else:
         private_dir = out_path / f"round-{round_num}" / "private"
 
@@ -492,27 +502,29 @@ def format_debate_context(round_num: int, agent_id: int, mode: str = "product",
     return "\n".join(context_parts)
 
 
-def format_judge_input() -> dict:
+def format_judge_input(output_dir: str = "debate-output") -> dict:
     """
     Format input for the 2-step judge.
     Step 1 uses opening statement evidence (first-round, from MAD memory_lst[2]).
     Step 2 uses both opening and final round evidence.
     """
     state = get_state()
+    out_path = Path(output_dir)
 
-    # Get opening statements (first-round evidence, before groupthink)
-    opening_dir = SESSION_DIR / "phase2"
+    opening_dir = out_path / "phase2"
+    if not opening_dir.exists():
+        opening_dir = SESSION_DIR / "phase2"
     openings = {}
-    for f in sorted(opening_dir.glob("agent-*-opening.md")):
+    for f in sorted(opening_dir.glob("agent-*.md")):
         openings[f.stem] = f.read_text()
 
-    # Get finalist products from state
     finalists = state.get("finalists", [])
 
-    # Get final debate round
-    phase5_dir = SESSION_DIR / "phase5"
+    phase5_dir = out_path / "phase5"
+    if not phase5_dir.exists():
+        phase5_dir = SESSION_DIR / "phase5"
     finals = {}
-    for f in sorted(phase5_dir.glob("finals-agent-*.md")):
+    for f in sorted(phase5_dir.glob("*.md")):
         finals[f.stem] = f.read_text()
 
     return {
@@ -523,11 +535,11 @@ def format_judge_input() -> dict:
     }
 
 
-def compile_synthesis() -> dict:
+def compile_synthesis(output_dir: str = "debate-output") -> dict:
     """Gather all evidence needed for Phase 6 synthesis."""
     state = get_state()
+    out_path = Path(output_dir)
 
-    # Collect from all phases
     evidence = {
         "query": state["query"],
         "winner": state.get("winner"),
@@ -536,37 +548,44 @@ def compile_synthesis() -> dict:
         "convergence_history": state.get("convergence_history", []),
     }
 
-    # Phase 1 research summaries (truncated)
     phase1_dir = SESSION_DIR / "phase1"
     evidence["research"] = {}
-    for f in sorted(phase1_dir.glob("agent-*.md")):
-        evidence["research"][f.stem] = f.read_text()[:3000]
+    if phase1_dir.exists():
+        for f in sorted(phase1_dir.glob("agent-*.md")):
+            evidence["research"][f.stem] = f.read_text()[:3000]
 
-    # Phase 4 elimination rationale (check all rounds)
+    phase4_dir = SESSION_DIR / "phase4"
     evidence["elimination_details"] = []
-    for elim_file in sorted((SESSION_DIR / "phase4").rglob("elimination-results.json")):
-        evidence["elimination_details"].append(json.loads(elim_file.read_text()))
+    if phase4_dir.exists():
+        for elim_file in sorted(phase4_dir.rglob("elimination-results.json")):
+            evidence["elimination_details"].append(json.loads(elim_file.read_text()))
 
-    # Phase 5 judge verdict
-    verdict_file = SESSION_DIR / "phase5" / "final-verdict.md"
-    if verdict_file.exists():
-        evidence["judge_verdict"] = verdict_file.read_text()
+    phase5_dir = out_path / "phase5"
+    if not phase5_dir.exists():
+        phase5_dir = SESSION_DIR / "phase5"
+    for name in ["final-judgment.md", "final-verdict.md"]:
+        verdict_file = phase5_dir / name
+        if verdict_file.exists():
+            evidence["judge_verdict"] = verdict_file.read_text()
+            break
 
-    # Jury validation
-    jury_files = sorted((SESSION_DIR / "phase5").glob("jury-*.md"))
+    jury_files = sorted(phase5_dir.glob("jury-*.md")) if phase5_dir.exists() else []
     evidence["jury_validations"] = [f.read_text() for f in jury_files]
 
     return evidence
 
 
-def assess_convergence_wrapper(round_num: int) -> dict:
+def assess_convergence_wrapper(round_num: int, output_dir: str = "debate-output") -> dict:
     """
     Wrapper that calls convergence_detector and saves results to state.
     Delegates to convergence_detector.py for the actual analysis.
     """
-    round_dir = SESSION_DIR / "phase3" / f"round-{round_num}"
+    out_path = Path(output_dir)
+    round_dir = out_path / "phase3" / f"round-{round_num}"
     if not round_dir.exists():
-        return {"error": f"Round directory not found: {round_dir}"}
+        round_dir = SESSION_DIR / "phase3" / f"round-{round_num}"
+    if not round_dir.exists():
+        return {"error": f"Round directory not found in {output_dir} or {SESSION_DIR}"}
 
     sys.path.insert(0, str(Path(__file__).parent))
     from convergence_detector import assess_convergence
@@ -590,7 +609,7 @@ def assess_convergence_wrapper(round_num: int) -> dict:
     return result
 
 
-def format_private_pairs(round_num: int) -> list[dict]:
+def format_private_pairs(round_num: int, output_dir: str = "debate-output") -> list[dict]:
     """
     Generate agent pairings for private deliberation channel.
     From elimination_game's dual channel (analysis.md:914-949).
@@ -602,15 +621,19 @@ def format_private_pairs(round_num: int) -> list[dict]:
     agents = state.get("agents", [])
     num_agents = len(agents) if agents else state.get("agent_count", 5)
 
+    seen_pairs: set[tuple[int, int]] = set()
     pairs = []
     for i in range(1, num_agents + 1):
         partner = ((i - 1 + round_num) % num_agents) + 1
         if partner != i:
-            pair = tuple(sorted([i, partner]))
-            if pair not in [(p["agent_a"], p["agent_b"]) for p in pairs]:
+            sorted_pair = sorted([i, partner])
+            pair = (sorted_pair[0], sorted_pair[1])
+            if pair not in seen_pairs:
+                seen_pairs.add(pair)
                 pairs.append({"agent_a": pair[0], "agent_b": pair[1]})
 
-    private_dir = SESSION_DIR / "phase3" / f"round-{round_num}" / "private"
+    out_path = Path(output_dir)
+    private_dir = out_path / "phase3" / f"round-{round_num}" / "private"
     private_dir.mkdir(parents=True, exist_ok=True)
 
     return pairs
@@ -773,7 +796,11 @@ if __name__ == "__main__":
         print(json.dumps(result, indent=2))
 
     elif command == "check-duplicates":
-        result = check_duplicates()
+        out_dir = "debate-output"
+        for i, arg in enumerate(sys.argv):
+            if arg == "--output-dir" and i + 1 < len(sys.argv):
+                out_dir = sys.argv[i + 1]
+        result = check_duplicates(output_dir=out_dir)
         print(json.dumps(result, indent=2))
 
     elif command == "format-debate-context":
@@ -791,7 +818,11 @@ if __name__ == "__main__":
 
     elif command == "assess-convergence":
         round_num = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-        result = assess_convergence_wrapper(round_num)
+        ac_out_dir = "debate-output"
+        for i, arg in enumerate(sys.argv):
+            if arg == "--output-dir" and i + 1 < len(sys.argv):
+                ac_out_dir = sys.argv[i + 1]
+        result = assess_convergence_wrapper(round_num, output_dir=ac_out_dir)
         print(json.dumps(result, indent=2))
         rec = result.get("recommendation", "continue")
         if rec == "converged":
@@ -803,16 +834,30 @@ if __name__ == "__main__":
 
     elif command == "format-private-pairs":
         round_num = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-        pairs = format_private_pairs(round_num)
+        fp_out_dir = "debate-output"
+        for i, arg in enumerate(sys.argv):
+            if arg == "--output-dir" and i + 1 < len(sys.argv):
+                fp_out_dir = sys.argv[i + 1]
+        pairs = format_private_pairs(round_num, output_dir=fp_out_dir)
         print(json.dumps(pairs, indent=2))
 
     elif command == "format-judge-input":
-        result = format_judge_input()
+        out_dir = "debate-output"
+        for i, arg in enumerate(sys.argv):
+            if arg == "--output-dir" and i + 1 < len(sys.argv):
+                out_dir = sys.argv[i + 1]
+        result = format_judge_input(output_dir=out_dir)
         print(json.dumps(result, indent=2))
 
     elif command == "compile-synthesis":
-        result = compile_synthesis()
-        (SESSION_DIR / "phase6" / "evidence.json").write_text(json.dumps(result, indent=2))
+        out_dir = "debate-output"
+        for i, arg in enumerate(sys.argv):
+            if arg == "--output-dir" and i + 1 < len(sys.argv):
+                out_dir = sys.argv[i + 1]
+        result = compile_synthesis(output_dir=out_dir)
+        evidence_dir = SESSION_DIR / "phase6"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        (evidence_dir / "evidence.json").write_text(json.dumps(result, indent=2))
         print(json.dumps({"status": "compiled", "keys": list(result.keys())}))
 
     elif command == "update-state":

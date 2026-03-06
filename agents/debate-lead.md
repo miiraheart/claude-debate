@@ -648,25 +648,81 @@ Write final revised judgment to: debate-output/phase5/final-judgment.md
 
 ### Phase 6 — Synthesis
 
+**Step 1 — Compile evidence:**
+
 ```bash
 python3 scripts/debate_orchestrator.py compile-synthesis
 ```
 
-Spawn synthesis agent with the synthesizer template:
+This writes `evidence.json` to the session dir. Read it to get `query`, `winner`, `runner_up`, `eliminated`, `convergence_history`, `judge_verdict`, `jury_validations`, and `research` summaries.
+
+**Step 2 — Build structured synthesis prompt:**
+
+Read `prompts/synthesizer.md` for the template structure. Build the actual prompt by populating it with real data from the compiled evidence:
+
+```
+SendMessage(
+  type: "message",
+  recipient: "synthesizer",
+  summary: "Phase 6: Final synthesis",
+  content: """
+SYNTHESIS — Final Report
+
+## Original Query
+<QUERY from evidence>
+
+## Debate Results
+**Winner**: <WINNER from state> — selected by <judge method> with <jury status>
+**Runner-up**: <RUNNER_UP from state>
+**Eliminated products**: <ELIMINATED list with round of elimination>
+
+## Evidence Archive
+<Include truncated research summaries from evidence.research>
+<Include judge verdict from evidence.judge_verdict>
+<Include jury validations from evidence.jury_validations>
+
+## Convergence Status
+<CONVERGED/STALLED/CONTINUED from convergence_history>
+Overall convergence: <last convergence percentage>%
+
+## Required Output (ALL sections mandatory)
+1. Recommendation with buy link (verified via WebFetch)
+2. Comparison table — ALL products from Phase 1, not just finalists
+3. Why [Winner] wins — reference debate evidence only
+4. The Case for [Runner-up] — specific scenarios with buy link
+5. What the Debate Missed — evidence gaps, market factors, biases
+6. Sources — deduplicated URLs by product
+
+Write to: debate-output/final-report.md
+
+Rules:
+- Every claim must come from debate evidence — no new claims
+- Buy links are MANDATORY for winner and runner-up
+- Sources must be real URLs — never fabricate
+- If jury challenged the winner, acknowledge the controversy
+"""
+)
+```
+
+**Step 3 — Spawn synthesizer (if not already a team member):**
+
+If the synthesizer was not spawned as a team member, spawn it:
 
 ```
 Task(
   subagent_type: "claude-debate:synthesizer",
   name: "synthesizer",
   team_name: "debate",
-  prompt: "Synthesize the debate output into the final report. Source materials: debate-output/. Final judgment: debate-output/phase5/final-judgment.md. Write final report to: debate-output/final-report.md"
+  prompt: "You are the synthesizer. Follow your agent instructions exactly. Wait for your assignment."
 )
 ```
 
+Then send the structured synthesis prompt via SendMessage.
+
 **3-level fallback:**
-1. Primary: synthesizer agent completes successfully
-2. Backup: re-run synthesizer with simplified prompt
-3. Last resort: concatenate raw phase outputs into `debate-output/final-report.md`
+1. Primary: synthesizer agent completes successfully with all required sections
+2. Backup: re-send with simplified prompt: "Summarize the debate results. Winner: [WINNER]. Runner-up: [RUNNER_UP]. Create: comparison table, 2-paragraph recommendation, source list. Evidence: [truncated evidence]"
+3. Last resort: concatenate raw phase outputs into `debate-output/final-report.md` with header: "*Full synthesis unavailable. Individual agent findings below:*"
 
 **Validate buy links:** For each product link in the final report, call `WebFetch` to confirm it resolves. Replace broken links with search URLs.
 

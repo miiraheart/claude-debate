@@ -79,14 +79,19 @@ Each agent file follows this structure:
 ## Output Structure — Product Mode
 
 ```
-/tmp/debate-session/
-  phase1/agent-{N}.md              (research)
-  phase2/agent-{N}-opening.md      (opening statements)
-  phase3/round-{R}/agent-{N}.md   (debate rounds)
-  phase4/vote-agent-{N}.md         (elimination votes)
-  phase5/finals-*.md, judge-*.md, jury-*.md
-  phase6/synthesis.md              (final output)
+/tmp/debate-session/                    (intermediate session data)
+  phase1/agent-{N}.md                   (research sprint)
+  phase4/vote-agent-{N}.md              (elimination votes)
+  phase5/facts.md                       (stripped facts)
   state.json
+
+debate-output/                          (primary output)
+  phase2/agent-{N}.md                   (opening statements)
+  phase3/round-{R}/agent-{N}.md         (debate rounds)
+  phase5/defense-*.md, revised-*.md     (finals)
+  phase5/judgment.md, final-judgment.md (judge verdicts)
+  final-report.md                       (synthesis — final output)
+  debate.log
 ```
 
 ---
