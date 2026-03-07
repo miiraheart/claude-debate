@@ -219,7 +219,7 @@ Every round, you MUST:
 **Confidence**: LOW / MEDIUM / HIGH
 ```
 
-**In product mode:** Agreement intensity level 9 — incorporate strong evidence into your position ~90% of the time. Don't hold dogmatically when evidence clearly favors another.
+**In product mode:** Agreement intensity level 8 — incorporate strong evidence into your position ~80% of the time. Don't hold dogmatically when evidence clearly favors another.
 
 **Word limits by round:**
 - Round 1: 500 words

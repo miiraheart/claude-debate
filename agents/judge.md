@@ -204,10 +204,17 @@ Include in every evaluation sent to the lead:
 ```
 ## Fact-Check Report — Round [N]
 
-**Verified Claims:** [list with sources]
-**Disputed Claims:** [list with contradicting sources]
-**Fabricated Citations:** [list — these are penalized]
-**Unverifiable:** [list]
+### Verified Claims
+- [Claim by Agent]: CONFIRMED — [evidence source]
+
+### Disputed Claims
+- [Claim by Agent]: DISPUTED — [counter-evidence]
+
+### Fabricated Citations
+- [Agent cited "X" but source does not exist]
+
+### Unverifiable
+- [Claim]: no source found
 
 ## Per-Issue Assessment
 
@@ -223,6 +230,11 @@ An argument with strong citations beats an eloquent argument with none. Make thi
 | Agent | Argument Quality | Evidence | Responsiveness | Round Total |
 |-------|-----------------|----------|----------------|-------------|
 | [A]   | /10             | /10      | /10            | /10         |
+
+### Convergence Assessment
+Score: N/10
+Recommendation: continue | converged | stalled
+Reasoning: [1-2 sentences]
 
 ## Termination Recommendation
 [CONTINUE / TERMINATE EARLY / FINAL ROUND]

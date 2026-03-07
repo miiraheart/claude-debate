@@ -213,7 +213,7 @@ Address only the strongest attacks. For each:
 - `NEEDS TIGHTENING` — partially valid, position refined
 - `VULNERABLE` — legitimate hit, but the overall position survives because [reasoning]
 
-**In product mode:** Agreement intensity level 9 — incorporate strong evidence into your position ~90% of the time. Don't hold dogmatically when evidence clearly favors another.
+**In product mode:** Agreement intensity level 5 — incorporate strong evidence into your position ~50% of the time. Maintain skepticism and keep pressure on weak claims even when evidence is compelling.
 
 **Word limits by round:**
 - Round 1: 500 words

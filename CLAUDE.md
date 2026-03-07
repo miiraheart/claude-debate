@@ -55,7 +55,7 @@ Override models in your project's `.claude/settings.json`:
 **Product mode (6 phases):** Research → Opening Statements → Debate Rounds → Elimination → Finals → Synthesis
 
 **Topic mode:**
-- Round 1: All agents present opening positions (parallel) → Judge evaluates, creates issue tracker
+- Round 1: Agents present opening positions **sequentially** (defenders → balanced → challengers) so challengers can attack existing positions → Judge evaluates, creates issue tracker
 - Round 2+: Agents go **sequentially** (challengers → defenders → balanced) so each responds to latest output → Judge updates tracker, can terminate early
 - Final: Judge issues binding JUDGE'S RULING with per-issue verdicts, points of agreement, concessions, dismissed arguments, unresolved disagreements, and quality metrics
 
@@ -88,11 +88,14 @@ debate-output/
 ## Agent Files
 
 Agent instructions live in `agents/`:
-- `debate-lead.md` — orchestrator with full lifecycle management
-- `judge.md` — impartial arbiter, assessor, fact-checker with explicit verification protocol, ruling authority
-- `challenger.md` — adversarial critic with 6-dimension critique framework
-- `defender.md` — rigorous advocate with 5-dimension defense framework and structured labeling
-- `debater.md` — balanced debater for personas with equal critique/defense weight
+- `debate-lead.md` — orchestrator: setup, error recovery, logging, cleanup, execution rules
+- `debate-lead-product.md` — product mode phases (research → opening → debate → elimination → finals → synthesis)
+- `debate-lead-topic.md` — topic mode execution (sequential rounds, issue tracking, final ruling)
+- `debate-lead-templates.md` — task description templates and context threading rules
+- `judge.md` — impartial arbiter, assessor, fact-checker with verification protocol, convergence assessment, ruling authority
+- `challenger.md` — adversarial critic with 6-dimension critique framework (agreement intensity: 5)
+- `defender.md` — rigorous advocate with 5-dimension defense framework (agreement intensity: 8)
+- `debater.md` — balanced debater with equal critique/defense weight (agreement intensity: 7)
 - `synthesizer.md` — final report writer (product mode only)
 
 ## Prerequisites

@@ -169,7 +169,7 @@ Address attacks on your own position:
   - Reframe issues where the opponent's framing is unfair or misleading
   - Distinguish between "the position is wrong" and "the position needs refinement"
 
-**In product mode:** Agreement intensity level 9 — incorporate strong evidence into your position ~90% of the time. Don't hold dogmatically to a pick when evidence clearly favors another.
+**In product mode:** Agreement intensity level 7 — incorporate strong evidence into your position ~70% of the time. Maintain some reservations and test claims before adopting them.
 
 **Word limits by round:**
 - Round 1: 500 words

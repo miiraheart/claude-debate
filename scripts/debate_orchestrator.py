@@ -17,10 +17,6 @@ Usage:
     python3 debate_orchestrator.py set-personas '[{"name": "...", "description": "..."}]'
     python3 debate_orchestrator.py summarize-research
     python3 debate_orchestrator.py check-duplicates
-    python3 debate_orchestrator.py format-debate-context <round> <agent_id>
-    python3 debate_orchestrator.py assess-convergence <round>
-    python3 debate_orchestrator.py format-private-pairs <round>
-    python3 debate_orchestrator.py format-judge-input
     python3 debate_orchestrator.py compile-synthesis
     python3 debate_orchestrator.py update-state '{"key": "value"}'
     python3 debate_orchestrator.py issue-tracker init "Topic text"
@@ -29,7 +25,6 @@ Usage:
 """
 
 import json
-import random
 import re
 import sys
 from datetime import datetime
@@ -53,25 +48,6 @@ def _resolve_session_dir() -> Path:
 SESSION_DIR = _resolve_session_dir()
 STATE_FILE = SESSION_DIR / "state.json"
 
-MAX_CONTEXT_CHARS = 12000
-MAX_PER_AGENT_CHARS = 2000
-MIN_PER_AGENT_CHARS = 500
-
-# Agreement intensity suffixes (from DebateLLM google_ma_debate.yaml, L534-583)
-# Level 0-10 scale; level 9 is empirically optimal (90% deference)
-AGREEMENT_INTENSITY = {
-    0: "These are the opinions of other agents. You completely disagree with all of them.",
-    1: "These are the opinions of other agents. You hardly consider these opinions.",
-    2: "These are the opinions of other agents. You barely consider these opinions, with very strong reservations.",
-    3: "These are the opinions of other agents. You are skeptical of these opinions, with very strong reservations.",
-    4: "These are the opinions of other agents. You consider these opinions with strong reservations.",
-    5: "These are the opinions of other agents. You consider these opinions with some reservations.",
-    6: "You incorporate other agents' evidence 60% of the time and have reservations. Using their positions as additional perspective, provide your updated position.",
-    7: "You incorporate other agents' evidence 70% of the time and have some reservations. Using their positions as additional perspective, provide your updated position.",
-    8: "You incorporate other agents' evidence 80% of the time and have few reservations. Using their positions as additional perspective, provide your updated position.",
-    9: "You incorporate other agents' evidence 90% of the time and have almost no reservations. Using their positions as additional perspective, provide your updated position.",
-    10: "You fully incorporate other agents' evidence. Using their positions, provide your updated position.",
-}
 DEFAULT_AGREEMENT_INTENSITY = 9
 
 
@@ -309,6 +285,21 @@ def _is_fuzzy_match(a: str, b: str) -> bool:
     return overlap >= 0.7
 
 
+def extract_position(text: str) -> str:
+    """Extract the product pick from an agent's response.
+    Looks for 'My Pick:', 'PICK:', 'recommend', 'champion' patterns."""
+    pick_patterns = [
+        re.compile(r'\*{0,2}(?:My Pick|PICK|Winner)\*{0,2}\s*:\s*\*{0,2}(.+?)\*{0,2}\s*$', re.IGNORECASE | re.MULTILINE),
+        re.compile(r'\b(?:recommend|champion)\s*:\s*\*{0,2}(.+?)\*{0,2}\s*$', re.IGNORECASE | re.MULTILINE),
+        re.compile(r'I (?:still )?(?:support|recommend|pick|choose|advocate)\s+\*{0,2}(.+?)\*{0,2}\s*$', re.IGNORECASE | re.MULTILINE),
+    ]
+    for pattern in pick_patterns:
+        match = pattern.search(text)
+        if match:
+            return match.group(1).strip().strip('*').strip()
+    return ""
+
+
 def check_duplicates(output_dir: str = "debate-output") -> dict:
     """Check Phase 2 opening statements for duplicate product picks.
     Uses fuzzy matching to catch near-duplicates like
@@ -317,9 +308,6 @@ def check_duplicates(output_dir: str = "debate-output") -> dict:
     if not phase2_dir.exists():
         phase2_dir = SESSION_DIR / "phase2"
     files = sorted(phase2_dir.glob("agent-*.md"))
-
-    sys.path.insert(0, str(Path(__file__).parent))
-    from convergence_detector import extract_position
 
     picks = {}
     for f in files:
@@ -349,189 +337,6 @@ def check_duplicates(output_dir: str = "debate-output") -> dict:
         "picks": picks,
         "duplicates": duplicates,
         "has_duplicates": len(duplicates) > 0,
-    }
-
-
-def truncate_to_budget(text: str, max_chars: int) -> str:
-    """
-    Truncate text to budget, preserving structure.
-    Inspired by debatellm's concept of context overflow management, but uses a
-    different technique: proactive paragraph-level truncation (keep first + last,
-    trim middle) vs debatellm's reactive pop-on-error retry loop.
-    """
-    if len(text) <= max_chars:
-        return text
-
-    paragraphs = text.split("\n\n")
-    if len(paragraphs) <= 2:
-        return text[:max_chars] + "\n[... truncated for context budget ...]"
-
-    first = paragraphs[0]
-    last = paragraphs[-1]
-    middle = paragraphs[1:-1]
-
-    result = first + "\n\n"
-    remaining = max_chars - len(first) - len(last) - 60
-
-    for para in middle:
-        if remaining <= 0:
-            result += "[... middle sections trimmed for context budget ...]\n\n"
-            break
-        if len(para) <= remaining:
-            result += para + "\n\n"
-            remaining -= len(para) + 2
-        else:
-            result += para[:remaining] + "...\n\n"
-            remaining = 0
-
-    result += last
-    return result
-
-
-def format_debate_context(round_num: int, agent_id: int, mode: str = "product",
-                          output_dir: str = "debate-output") -> str:
-    """
-    Format the full context an agent sees for a debate round.
-    Dense topology: all agents see all other agents' responses.
-    Adapted from debate-or-vote get_new_message() (analysis.md:322-383).
-
-    Works for both product mode (phase2/phase3 dirs in SESSION_DIR) and
-    topic mode (round-N dirs in output_dir).
-
-    Context overflow management (from debatellm Innovation 5):
-    Progressive truncation — preserve system prompt, trim oldest content first.
-    Total context budget: MAX_CONTEXT_CHARS. Per-agent budget computed dynamically.
-    """
-    state = get_state()
-    out_path = Path(output_dir)
-
-    current_round_dir = None
-    if mode == "topic":
-        if round_num == 1:
-            source_dir = out_path / "round-1"
-        else:
-            source_dir = out_path / f"round-{round_num - 1}"
-        pattern = "agent-*.md"
-        own_key = f"agent-{agent_id}"
-        current_round_dir = out_path / f"round-{round_num}"
-    else:
-        if round_num == 1:
-            source_dir = out_path / "phase2"
-            if not source_dir.exists():
-                source_dir = SESSION_DIR / "phase2"
-            pattern = "agent-*.md"
-        else:
-            source_dir = out_path / "phase3" / f"round-{round_num - 1}"
-            if not source_dir.exists():
-                source_dir = SESSION_DIR / "phase3" / f"round-{round_num - 1}"
-            pattern = "agent-*.md"
-        own_key = f"agent-{agent_id}"
-
-    responses = {}
-    if source_dir.exists():
-        for f in sorted(source_dir.glob(pattern)):
-            responses[f.stem] = f.read_text()
-
-    if current_round_dir is not None and round_num > 1 and current_round_dir.exists():
-        for f in sorted(current_round_dir.glob(pattern)):
-            if f.stem != own_key:
-                responses[f"current-{f.stem}"] = f.read_text()
-
-    other_items = [(k, v) for k, v in responses.items()
-                   if k != own_key and str(agent_id) not in k]
-    random.shuffle(other_items)
-
-    own_response = responses.get(own_key, "")
-
-    num_others = len(other_items)
-    suffix_budget = 300
-    own_budget = min(MAX_PER_AGENT_CHARS, MAX_CONTEXT_CHARS // 4)
-    remaining_budget = MAX_CONTEXT_CHARS - suffix_budget - own_budget
-    per_agent_budget = max(
-        MIN_PER_AGENT_CHARS,
-        remaining_budget // max(num_others, 1),
-    )
-
-    context_parts = [
-        f"You are in round {round_num} of the debate.\n\n",
-        "These are the recent positions from other agents:\n",
-    ]
-
-    for _, response in other_items:
-        truncated = truncate_to_budget(response, per_agent_budget)
-        context_parts.append(f"One agent's position:\n```\n{truncated}\n```\n")
-
-    if own_response:
-        own_truncated = truncate_to_budget(own_response, own_budget)
-        context_parts.append(
-            f"This was your most recent position:\n```\n{own_truncated}\n```\n"
-        )
-
-    # Include private channel notes if they exist
-    if mode == "product":
-        private_dir = out_path / "phase3" / f"round-{round_num}" / "private"
-        if not private_dir.exists():
-            private_dir = SESSION_DIR / "phase3" / f"round-{round_num}" / "private"
-    else:
-        private_dir = out_path / f"round-{round_num}" / "private"
-
-    if private_dir.exists():
-        private_files = sorted(private_dir.glob(f"*-to-agent-{agent_id}.md")) + \
-                        sorted(private_dir.glob(f"agent-{agent_id}-to-*.md"))
-        if private_files:
-            context_parts.append("\n## Private Deliberation Notes (only you see these):\n")
-            for pf in private_files:
-                note = truncate_to_budget(pf.read_text(), MIN_PER_AGENT_CHARS)
-                context_parts.append(f"```\n{note}\n```\n")
-
-    # Include issue tracker if it exists (topic mode gets this too now)
-    tracker_path = out_path / "issue-tracker.md"
-    if not tracker_path.exists():
-        tracker_path = SESSION_DIR / "issue-tracker.md"
-    if tracker_path.exists():
-        tracker_content = truncate_to_budget(tracker_path.read_text(), MAX_PER_AGENT_CHARS)
-        context_parts.append(f"\n## Issue Tracker (current state):\n```\n{tracker_content}\n```\n")
-
-    intensity = state.get("agreement_intensity", DEFAULT_AGREEMENT_INTENSITY)
-    suffix = AGREEMENT_INTENSITY.get(intensity, AGREEMENT_INTENSITY[DEFAULT_AGREEMENT_INTENSITY])
-    context_parts.append(
-        f"\n{suffix}\n"
-        f"Provide your updated position on the query:\n{state['query']}"
-    )
-
-    return "\n".join(context_parts)
-
-
-def format_judge_input(output_dir: str = "debate-output") -> dict:
-    """
-    Format input for the 2-step judge.
-    Step 1 uses opening statement evidence (first-round, from MAD memory_lst[2]).
-    Step 2 uses both opening and final round evidence.
-    """
-    state = get_state()
-    out_path = Path(output_dir)
-
-    opening_dir = out_path / "phase2"
-    if not opening_dir.exists():
-        opening_dir = SESSION_DIR / "phase2"
-    openings = {}
-    for f in sorted(opening_dir.glob("agent-*.md")):
-        openings[f.stem] = f.read_text()
-
-    finalists = state.get("finalists", [])
-
-    phase5_dir = out_path / "phase5"
-    if not phase5_dir.exists():
-        phase5_dir = SESSION_DIR / "phase5"
-    finals = {}
-    for f in sorted(phase5_dir.glob("*.md")):
-        finals[f.stem] = f.read_text()
-
-    return {
-        "query": state["query"],
-        "finalists": finalists,
-        "opening_evidence": openings,
-        "final_evidence": finals,
     }
 
 
@@ -573,70 +378,6 @@ def compile_synthesis(output_dir: str = "debate-output") -> dict:
     evidence["jury_validations"] = [f.read_text() for f in jury_files]
 
     return evidence
-
-
-def assess_convergence_wrapper(round_num: int, output_dir: str = "debate-output") -> dict:
-    """
-    Wrapper that calls convergence_detector and saves results to state.
-    Delegates to convergence_detector.py for the actual analysis.
-    """
-    out_path = Path(output_dir)
-    round_dir = out_path / "phase3" / f"round-{round_num}"
-    if not round_dir.exists():
-        round_dir = SESSION_DIR / "phase3" / f"round-{round_num}"
-    if not round_dir.exists():
-        return {"error": f"Round directory not found in {output_dir} or {SESSION_DIR}"}
-
-    sys.path.insert(0, str(Path(__file__).parent))
-    from convergence_detector import assess_convergence
-
-    result = assess_convergence(str(round_dir))
-
-    output_path = SESSION_DIR / "phase3" / f"convergence-round-{round_num}.json"
-    output_path.write_text(json.dumps(result, indent=2))
-
-    state = get_state()
-    history = state.get("convergence_history", [])
-    history.append({
-        "round": round_num,
-        "recommendation": result.get("recommendation", "unknown"),
-        "overall_convergence": result.get("overall_convergence", 0),
-        "agreement_ratio": result.get("agreement_ratio", 0),
-        "avg_stability": result.get("avg_stability", 0),
-    })
-    update_state({"convergence_history": history, "phase": f"phase3-round-{round_num}"})
-
-    return result
-
-
-def format_private_pairs(round_num: int, output_dir: str = "debate-output") -> list[dict]:
-    """
-    Generate agent pairings for private deliberation channel.
-    From elimination_game's dual channel (analysis.md:914-949).
-
-    Each agent is paired with 1-2 others for private critique exchange.
-    Uses round-robin pairing to ensure all agents interact privately.
-    """
-    state = get_state()
-    agents = state.get("agents", [])
-    num_agents = len(agents) if agents else state.get("agent_count", 5)
-
-    seen_pairs: set[tuple[int, int]] = set()
-    pairs = []
-    for i in range(1, num_agents + 1):
-        partner = ((i - 1 + round_num) % num_agents) + 1
-        if partner != i:
-            sorted_pair = sorted([i, partner])
-            pair = (sorted_pair[0], sorted_pair[1])
-            if pair not in seen_pairs:
-                seen_pairs.add(pair)
-                pairs.append({"agent_a": pair[0], "agent_b": pair[1]})
-
-    out_path = Path(output_dir)
-    private_dir = out_path / "phase3" / f"round-{round_num}" / "private"
-    private_dir.mkdir(parents=True, exist_ok=True)
-
-    return pairs
 
 
 def issue_tracker_init(topic: str, output_dir: str | None = None) -> str:
@@ -801,52 +542,6 @@ if __name__ == "__main__":
             if arg == "--output-dir" and i + 1 < len(sys.argv):
                 out_dir = sys.argv[i + 1]
         result = check_duplicates(output_dir=out_dir)
-        print(json.dumps(result, indent=2))
-
-    elif command == "format-debate-context":
-        round_num = int(sys.argv[2])
-        agent_id = int(sys.argv[3])
-        ctx_mode = "product"
-        ctx_output_dir = "debate-output"
-        for i, arg in enumerate(sys.argv):
-            if arg == "--mode" and i + 1 < len(sys.argv):
-                ctx_mode = sys.argv[i + 1]
-            if arg == "--output-dir" and i + 1 < len(sys.argv):
-                ctx_output_dir = sys.argv[i + 1]
-        context = format_debate_context(round_num, agent_id, mode=ctx_mode, output_dir=ctx_output_dir)
-        print(context)
-
-    elif command == "assess-convergence":
-        round_num = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-        ac_out_dir = "debate-output"
-        for i, arg in enumerate(sys.argv):
-            if arg == "--output-dir" and i + 1 < len(sys.argv):
-                ac_out_dir = sys.argv[i + 1]
-        result = assess_convergence_wrapper(round_num, output_dir=ac_out_dir)
-        print(json.dumps(result, indent=2))
-        rec = result.get("recommendation", "continue")
-        if rec == "converged":
-            sys.exit(0)
-        elif rec == "stalled":
-            sys.exit(2)
-        else:
-            sys.exit(1)
-
-    elif command == "format-private-pairs":
-        round_num = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-        fp_out_dir = "debate-output"
-        for i, arg in enumerate(sys.argv):
-            if arg == "--output-dir" and i + 1 < len(sys.argv):
-                fp_out_dir = sys.argv[i + 1]
-        pairs = format_private_pairs(round_num, output_dir=fp_out_dir)
-        print(json.dumps(pairs, indent=2))
-
-    elif command == "format-judge-input":
-        out_dir = "debate-output"
-        for i, arg in enumerate(sys.argv):
-            if arg == "--output-dir" and i + 1 < len(sys.argv):
-                out_dir = sys.argv[i + 1]
-        result = format_judge_input(output_dir=out_dir)
         print(json.dumps(result, indent=2))
 
     elif command == "compile-synthesis":

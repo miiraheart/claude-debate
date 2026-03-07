@@ -1,0 +1,249 @@
+# Topic Mode Execution
+
+Topic mode is round-based with an issue tracker maintained by the judge.
+
+---
+
+## Setup
+
+Judge recommends round count and personas. Lead spawns N agents as described in Setup Phase. Store `TOTAL_ROUNDS` privately — **never share this with debaters**.
+
+---
+
+## Round 1 — Opening Positions
+
+Round 1 runs **sequentially** with defenders first, then balanced, then challengers last. This ensures challengers can directly attack existing positions rather than arguing in a vacuum.
+
+**Ordering:** Defenders first → Balanced second → Challengers last. Within each group, order by agent number.
+
+Determine the ordering from the judge's persona list:
+1. Collect all agents with role `defender` → sorted by agent number
+2. Collect all agents with role `balanced` → sorted by agent number
+3. Collect all agents with role `challenger` → sorted by agent number
+4. Final order = defenders + balanced + challengers
+
+**For each agent in the sequential order:**
+
+If this is the first agent, they build their position from scratch:
+
+```
+SendMessage(
+  type: "message",
+  recipient: "agent-<N>",
+  summary: "Round 1: Opening position",
+  content: """
+ROUND 1 — OPENING POSITION
+
+Topic: <TOPIC>
+You are in round 1 of the debate. This is the opening round.
+Your persona: <PERSONA_NAME> — <PERSONA_DESCRIPTION>
+
+Present your opening position:
+1. Core thesis (1-2 sentences)
+2. Three supporting arguments with evidence or reasoning
+3. One preemptive rebuttal of the most obvious counterargument
+
+Write to: debate-output/round-1/agent-<N>.md
+Max 400 words.
+"""
+)
+```
+
+For subsequent agents, include the raw text of all prior submissions from this round:
+
+```
+SendMessage(
+  type: "message",
+  recipient: "agent-<N>",
+  summary: "Round 1: Opening position",
+  content: """
+ROUND 1 — OPENING POSITION
+
+Topic: <TOPIC>
+You are in round 1 of the debate. This is the opening round.
+Your persona: <PERSONA_NAME> — <PERSONA_DESCRIPTION>
+
+Positions already submitted this round:
+---
+<RAW_TEXT_OF_ALL_PRIOR_AGENT_SUBMISSIONS>
+---
+
+Present your opening position:
+1. Core thesis (1-2 sentences)
+2. Three supporting arguments with evidence or reasoning
+3. One preemptive rebuttal of the most obvious counterargument
+4. Direct response to at least one prior position (if any exist)
+
+Write to: debate-output/round-1/agent-<N>.md
+Max 400 words.
+"""
+)
+```
+
+Wait for each agent to respond before sending to the next agent.
+
+After all agents respond, send to judge:
+
+```
+SendMessage(
+  type: "message",
+  recipient: "judge",
+  summary: "Round 1: Evaluate and create issue tracker",
+  content: """
+Round 1 positions are complete. Read all opening statements:
+debate-output/round-1/
+
+Evaluate each position and create the issue tracker. The issue tracker should list:
+- Key contested claims
+- Points of agreement (if any)
+- Logical gaps or unsupported assertions
+- Questions that remain unresolved
+
+Write issue tracker to: debate-output/issue-tracker.md
+Write your round evaluation to: debate-output/evaluations/round-1.md
+"""
+)
+```
+
+Log:
+
+```bash
+echo "[$(date '+%H:%M:%S')] ROUND — Round 1 complete. Issue tracker created." >> debate-output/debate.log
+```
+
+---
+
+## Rounds 2 through N
+
+For each subsequent round R, agents go **sequentially** (not parallel). This creates real adversarial clash — each agent responds to the latest output, not just the previous round.
+
+**Ordering:** Challengers first → Defenders second → Balanced last. Within each group, order by agent number.
+
+Determine the ordering from the judge's persona list:
+1. Collect all agents with role `challenger` → sorted by agent number
+2. Collect all agents with role `defender` → sorted by agent number
+3. Collect all agents with role `balanced` → sorted by agent number
+4. Final order = challengers + defenders + balanced
+
+**For each agent in the sequential order:**
+
+**Step 1 — Build this agent's context:**
+
+Read prior round files and any already-submitted files from this round. For context, include:
+- All other agents' prior positions AND any already-submitted positions from this round
+- Their own prior position for reference
+- The current issue tracker contents
+
+Do NOT summarize — pass raw text through verbatim.
+
+**Step 2 — Send debate task to this agent (wait for response before next):**
+
+```
+SendMessage(
+  type: "message",
+  recipient: "agent-<N>",
+  summary: "Round <R>: Respond and advance",
+  content: """
+ROUND <R>
+
+Topic: <TOPIC>
+You are in round <R> of the debate.
+Your persona: <PERSONA_NAME> — <PERSONA_DESCRIPTION>
+
+Issue tracker (current):
+---
+<READ_AND_EMBED_ISSUE_TRACKER_CONTENTS>
+---
+
+Prior round positions:
+---
+<READ_AND_EMBED_ALL_PRIOR_ROUND_FILES>
+---
+
+Already submitted this round:
+---
+<READ_AND_EMBED_ANY_CURRENT_ROUND_FILES>
+---
+
+Your task:
+1. Respond to the strongest argument made against your position
+2. Advance your thesis with new reasoning or evidence
+3. Address at least one open issue from the tracker
+4. Identify one point where you concede ground (if warranted)
+
+Write to: debate-output/round-<R>/agent-<N>.md
+Max 400 words.
+"""
+)
+```
+
+Wait for this agent to respond and write their file before proceeding to the next agent in the sequence.
+
+**Step 3 — Judge evaluates and updates tracker:**
+
+```
+SendMessage(
+  type: "message",
+  recipient: "judge",
+  summary: "Round <R>: Evaluate and update tracker",
+  content: """
+Round <R> is complete. Read all responses:
+debate-output/round-<R>/
+
+Update the issue tracker based on what was argued this round:
+- Mark resolved issues as resolved (with verdict)
+- Add newly surfaced issues
+- Note shifts in debater positions
+
+Write updated tracker to: debate-output/issue-tracker.md
+Write evaluation to: debate-output/evaluations/round-<R>.md
+
+If you believe the debate has reached sufficient resolution before the final round, include "terminate": true in your response JSON.
+"""
+)
+```
+
+**Step 4 — Check for early termination:**
+
+Parse judge's response. If `"terminate": true` is present, stop rounds and proceed to Final Round immediately.
+
+Log each round:
+
+```bash
+echo "[$(date '+%H:%M:%S')] ROUND — Round <R>/<TOTAL> complete. Terminate: <YES/NO>" >> debate-output/debate.log
+```
+
+---
+
+## Final Round
+
+Tell the judge this is the final round. This is mandatory.
+
+```
+SendMessage(
+  type: "message",
+  recipient: "judge",
+  summary: "Final round: Issue binding ruling",
+  content: """
+This is the FINAL round of the debate.
+
+Read all debate output: debate-output/
+Read the complete issue tracker: debate-output/issue-tracker.md
+
+You MUST issue a binding JUDGE'S RULING. This ruling must include:
+1. Per-issue verdicts — for each tracked issue, state which position prevailed and why
+2. Quality metrics — rate each debater's argumentation (evidence quality, logical consistency, responsiveness)
+3. Overall verdict — which position (or synthesis) is most defensible, and why
+
+This ruling is final. Write it to: debate-output/final-ruling.md
+"""
+)
+```
+
+If judge fails to issue a ruling: retry the SendMessage. The ruling is mandatory — do not proceed without it.
+
+Log:
+
+```bash
+echo "[$(date '+%H:%M:%S')] RULING — Final ruling received. Writing complete." >> debate-output/debate.log
+```
