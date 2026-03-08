@@ -10,6 +10,20 @@ Judge recommends round count and personas. Lead spawns N agents as described in 
 
 ---
 
+## Resume Detection
+
+Before starting rounds, check for existing output from a prior interrupted run:
+
+1. Glob for `debate-output/round-*/agent-*.md`
+2. If files exist, determine the last complete round (a round is complete when all agents have written their file)
+3. Check if `debate-output/issue-tracker.md` exists (confirms judge evaluated that round)
+4. If a complete round is found:
+   - Log: `"[HH:MM:SS] RESUME — Found existing rounds 1-N. Resuming from round N+1."`
+   - Set the starting round to N+1 and skip to "Rounds 2 through N" section
+5. If no files exist or the only round is incomplete, start fresh from Round 1
+
+---
+
 ## Round 1 — Opening Positions
 
 Round 1 runs **sequentially** with defenders first, then balanced, then challengers last. This ensures challengers can directly attack existing positions rather than arguing in a vacuum.
@@ -90,8 +104,14 @@ SendMessage(
   recipient: "judge",
   summary: "Round 1: Evaluate and create issue tracker",
   content: """
-Round 1 positions are complete. Read all opening statements:
-debate-output/round-1/
+Round 1 positions are complete.
+
+Opening statements:
+---
+<READ_AND_EMBED_ALL_ROUND_1_AGENT_FILES>
+---
+
+(Files also available at: debate-output/round-1/)
 
 Evaluate each position and create the issue tracker. The issue tracker should list:
 - Key contested claims
@@ -108,7 +128,8 @@ Write your round evaluation to: debate-output/evaluations/round-1.md
 After each agent writes their file, log immediately:
 
 ```bash
-echo "[$(date '+%H:%M:%S')] WRITTEN — debate-output/round-1/agent-<N>.md submitted" >> debate-output/debate.log
+WC=$(wc -w < debate-output/round-1/agent-<N>.md)
+echo "[$(date '+%H:%M:%S')] WRITTEN — debate-output/round-1/agent-<N>.md submitted ($WC words, limit: 400)" >> debate-output/debate.log
 ```
 
 After judge creates the tracker:
@@ -202,7 +223,8 @@ Wait for this agent to respond and write their file before proceeding to the nex
 After each agent writes, log:
 
 ```bash
-echo "[$(date '+%H:%M:%S')] WRITTEN — debate-output/round-<R>/agent-<N>.md submitted" >> debate-output/debate.log
+WC=$(wc -w < debate-output/round-<R>/agent-<N>.md)
+echo "[$(date '+%H:%M:%S')] WRITTEN — debate-output/round-<R>/agent-<N>.md submitted ($WC words, limit: 400)" >> debate-output/debate.log
 ```
 
 **Step 3 — Judge evaluates and updates tracker:**
@@ -213,8 +235,14 @@ SendMessage(
   recipient: "judge",
   summary: "Round <R>: Evaluate and update tracker",
   content: """
-Round <R> is complete. Read all responses:
-debate-output/round-<R>/
+Round <R> is complete.
+
+Round <R> responses:
+---
+<READ_AND_EMBED_ALL_ROUND_R_AGENT_FILES>
+---
+
+(Files also available at: debate-output/round-<R>/)
 
 Update the issue tracker based on what was argued this round:
 - Mark resolved issues as resolved (with verdict)
@@ -237,7 +265,11 @@ After judge updates the tracker, log:
 echo "[$(date '+%H:%M:%S')] TRACKER — Round <R> updated. Resolved: N, Open: N, Stalled: N" >> debate-output/debate.log
 ```
 
-Parse judge's response. If `"terminate": true` is present, stop rounds and proceed to Final Round immediately.
+Parse judge's response. Check **both** termination signals:
+1. `"terminate": true` in the judge's JSON response
+2. The text `JUDGE'S RULING` appears anywhere in the judge's response
+
+If either signal is present, stop rounds and proceed to Final Round immediately.
 
 Log each round:
 

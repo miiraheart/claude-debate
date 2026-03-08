@@ -17,17 +17,20 @@ If there are no tasks, skip this step.
 
 ### 2. Clean up debate teams
 
-Look for team config files:
+Look for team config files. The Teams feature may store configs in different locations depending on the environment:
 ```bash
-ls ~/.claude/teams/*/config.json 2>/dev/null
+ls ~/.claude/teams/*/config.json 2>/dev/null || echo "No teams directory found"
 ```
+
+If the directory does not exist, skip this step — there are no teams to clean up.
 
 For each team whose description contains "debate" (case-insensitive):
 1. Read the config to check for active members (judge + up to 5 debaters: agent-1, agent-2, etc.)
 2. Send a `shutdown_request` to any active teammates
-3. Remove the team directory and its matching task directory:
+3. Remove the team directory and its matching task directory (if they exist):
    ```bash
-   rm -rf ~/.claude/teams/<team-name> ~/.claude/tasks/<team-name>
+   [ -d ~/.claude/teams/<team-name> ] && mv ~/.claude/teams/<team-name> /tmp/debate-cleanup-$(date +%s)/
+   [ -d ~/.claude/tasks/<team-name> ] && mv ~/.claude/tasks/<team-name> /tmp/debate-cleanup-$(date +%s)/
    ```
 
 **Do NOT delete teams that are not debate-related** (e.g., skip teams for other projects).

@@ -103,6 +103,11 @@ Most recent round positions (round <R-1>):
 <RAW_TEXT_OF_ROUND_R-1_OUTPUTS>
 ---
 
+Already submitted this round:
+---
+<READ_AND_EMBED_ANY_CURRENT_ROUND_FILES>
+---
+
 Your task:
 1. Defend your pick against specific criticisms raised in prior rounds
 2. Directly challenge the strongest competing pick (name it, cite specific weaknesses)
@@ -144,6 +149,11 @@ Prior rounds (read these files for full context):
 Most recent round positions (round <R-1>):
 ---
 <RAW_TEXT_OF_ROUND_R-1_OUTPUTS>
+---
+
+Already submitted this round:
+---
+<READ_AND_EMBED_ANY_CURRENT_ROUND_FILES>
 ---
 
 Your task:
@@ -271,3 +281,51 @@ Do not inject new opinions. Synthesize what the debate produced.
 ```
 
 The `<synthesize>` tag is set by the SKILL.md entry point. When present and `true`, the debate-lead should spawn a synthesizer after the final ruling (topic mode) or after Phase 5 (product mode).
+
+---
+
+## Synthesis Fallback (Product Mode)
+
+3-level fallback chain for synthesis resilience. The debate-lead uses this when the primary synthesizer fails.
+
+### Level 1 — Primary
+
+Run the full synthesis prompt via the synthesizer agent (see `agents/synthesizer.md`). This is the normal path.
+
+### Level 2 — Backup
+
+If the primary synthesizer fails or produces garbage (missing required sections), send a simplified prompt:
+
+```
+Summarize the results of this product research debate.
+
+Winner: {{WINNER}} (${{PRICE}}). Runner-up: {{RUNNER_UP}} (${{PRICE}}).
+
+Create:
+1. A comparison table of all products with price, key specs, best/worst for
+2. A 2-paragraph recommendation explaining why the winner was chosen
+3. A list of all source URLs organized by product
+
+Evidence: {{EVIDENCE_SUMMARY}}
+```
+
+### Level 3 — Concatenate Raw
+
+If both fail, present raw findings:
+
+```
+*Full synthesis unavailable. Individual agent findings below:*
+
+## Judge's Verdict
+{{JUDGE_VERDICT}}
+
+## Agent Research Summaries
+
+### {{PERSONA_1}}'s Pick: {{PRODUCT_1}}
+{{FINAL_POSITION_1}}
+
+### {{PERSONA_2}}'s Pick: {{PRODUCT_2}}
+{{FINAL_POSITION_2}}
+
+[... all agents ...]
+```

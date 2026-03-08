@@ -7,7 +7,7 @@ Each session gets a timestamped directory under /tmp/debate-sessions/ (e.g.
 /tmp/debate-sessions/debate-20260304-143022/). A symlink at /tmp/debate-session
 always points to the latest session. Previous sessions are preserved.
 
-Provides utilities for the prompt-relay architecture (from Mysti: no direct
+Provides utilities for the prompt-relay architecture (no direct
 agent-to-agent communication).
 
 Usage:

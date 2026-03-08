@@ -4,14 +4,14 @@
 > In topic mode, the debate ends at Phase 5 — the **Judge's Ruling is the final output**. No synthesis step runs.
 
 Used in Phase 6 — Final Synthesis. Implements:
-- **Structured synthesis** adapted from Mysti (BrainstormManager.ts:1376-1452)
-- **3-level fallback chain** from Mysti (BrainstormManager.ts:912-988)
+- **Structured synthesis** prompt template
+- **3-level fallback chain** for synthesis resilience
 
 ---
 
 ## Primary Synthesis Prompt
 
-Adapted from Mysti's verbatim synthesis prompt:
+Primary synthesis prompt:
 ```
 # Synthesis: Final Team Recommendation
 Your job is not merely to merge — it is to produce a recommendation BETTER than
@@ -112,15 +112,7 @@ Overall convergence: {{CONVERGENCE_PERCENTAGE}}%
 
 ---
 
-## 3-Level Synthesis Fallback (from Mysti BrainstormManager.ts:912-988)
-
-From Mysti's verbatim fallback chain:
-```
-1. Try synthesis agent
-2. Try another session agent
-3. Concatenate raw individual analyses with prefix:
-   "*Synthesis unavailable — individual analyses below:*"
-```
+## 3-Level Synthesis Fallback
 
 ### Level 1 — Primary (above prompt)
 

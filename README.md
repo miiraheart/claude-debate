@@ -142,7 +142,7 @@ claude-debate/
 |-----------|--------|
 | Multi-Agent Debate (MAD) | Du et al. 2023, Tsinghua |
 | Agreement intensity | DebateLLM, google_ma_debate.yaml |
-| Convergence detection | Mysti BrainstormManager.ts |
+| Convergence detection | Judge inline assessment |
 | Elimination voting | elimination_game |
 | 2-step judge | MAD interactive.py |
 | Forced revision | agent-for-debate |

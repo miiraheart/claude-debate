@@ -134,6 +134,14 @@ Agents should read these materials and cite them as primary sources in their arg
 
 All agents have `Read`, `Bash`, `WebSearch`, and `WebFetch` tools. They can read files, extract PDF text, and search the web for additional evidence.
 
+Log the results:
+
+```bash
+echo "[$(date '+%H:%M:%S')] SOURCES — Found <N> potential source files: <LIST>" >> debate-output/debate.log
+```
+
+If no source materials are found, skip this step silently.
+
 ### 1.7 Spawn Debater Agents (parallel)
 
 Spawn all debaters in parallel — one Task call per agent. **Use the role-specific agent type** based on the persona's adversarial role:

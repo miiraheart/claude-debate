@@ -4,6 +4,24 @@ Product mode runs six sequential phases. Each phase has a clear gate before proc
 
 ---
 
+## Resume Detection
+
+Before starting phases, check for existing output from a prior interrupted run:
+
+1. Glob for `debate-output/phase*/` directories and their contents
+2. Determine the last completed phase:
+   - Phase 1 complete: `/tmp/debate-session/phase1/agent-*.md` files exist for all agents
+   - Phase 2 complete: `debate-output/phase2/agent-*.md` files exist for all agents
+   - Phase 3 complete: `debate-output/phase3/round-*/agent-*.md` files exist for all agents across all rounds
+   - Phase 4 complete: `/tmp/debate-session/phase4/vote-agent-*.md` files exist
+   - Phase 5 complete: `debate-output/phase5/final-judgment.md` exists
+3. If a completed phase is found:
+   - Log: `"[HH:MM:SS] RESUME — Found completed phases 1-N. Resuming from phase N+1."`
+   - Skip to the appropriate phase
+4. If no files exist, start fresh from Phase 1
+
+---
+
 ## Phase 1 — Research Sprint
 
 **Goal:** Each agent researches products in the space and documents candidates with URLs.
@@ -220,6 +238,13 @@ Write to: debate-output/phase3/round-<R>/agent-<N>.md
 )
 ```
 
+After each agent writes their file, log with word count:
+
+```bash
+WC=$(wc -w < debate-output/phase3/round-<R>/agent-<N>.md)
+echo "[$(date '+%H:%M:%S')] WRITTEN — debate-output/phase3/round-<R>/agent-<N>.md submitted ($WC words, limit: <WORD_LIMIT>)" >> debate-output/debate.log
+```
+
 **Step 3 — Judge evaluates round + convergence assessment:**
 
 After each debate round, send the judge all round output. The judge's evaluation MUST include a `Convergence Assessment` section with a `Recommendation:` line (`continue`, `converged`, or `stalled`).
@@ -294,11 +319,68 @@ Repeat elimination rounds until exactly 2 finalists remain.
 
 ## Phase 5 — Finals
 
-**Head-to-head debate (parallel):**
+**Step 1 — Defense tasks (parallel):**
 
-Send each finalist champion a defense task (max 400 words). Then a forced revision where each champion reads the opponent's defense and writes a revised version (max 300 words).
+Send each finalist champion a defense task simultaneously:
 
-**Two-step judge evaluation:**
+```
+For each finalist champion agent-<A> defending <PRODUCT_A> against opponent agent-<B> defending <PRODUCT_B>:
+SendMessage(
+  type: "message",
+  recipient: "agent-<A>",
+  summary: "Phase 5: Finals defense",
+  content: """
+PHASE 5 — FINALS DEFENSE
+
+You are defending: <PRODUCT_A>
+Your opponent is defending: <PRODUCT_B>
+
+Your opponent's most recent position:
+---
+<READ_AND_EMBED_OPPONENT_LAST_POSITION>
+---
+
+Write your strongest defense. Focus on:
+1. Concrete use-case wins for your product
+2. Specific weaknesses of the competing product with evidence
+3. Evidence drawn from the full debate
+
+Max 400 words.
+Write to: debate-output/phase5/defense-<PRODUCT_A>.md
+"""
+)
+```
+
+Wait for both defenses, then proceed to revision.
+
+**Step 2 — Forced revision (sequential):**
+
+After both defenses are written, send each champion their opponent's defense for a revised response:
+
+```
+For each finalist champion agent-<A>:
+SendMessage(
+  type: "message",
+  recipient: "agent-<A>",
+  summary: "Phase 5: Revised defense",
+  content: """
+PHASE 5 — REVISED DEFENSE
+
+Your opponent's defense of <PRODUCT_B>:
+---
+<READ_AND_EMBED_OPPONENT_DEFENSE>
+---
+
+Write a revised defense that directly addresses their strongest points.
+Max 300 words.
+Write to: debate-output/phase5/revised-<PRODUCT_A>.md
+"""
+)
+```
+
+Wait for both revisions before proceeding to judge evaluation.
+
+**Step 3 — Two-step judge evaluation:**
 
 Step 1 — Strip to facts:
 ```
@@ -313,7 +395,27 @@ Write fact sheet to: /tmp/debate-session/phase5/facts.md
 )
 ```
 
-Step 2 — Fresh evaluation using ONLY the fact sheet and opening statements from Phase 2. Issue judgment with winner, three decisive factors, and runner-up strengths.
+Step 2 — Fresh evaluation:
+```
+SendMessage(
+  type: "message",
+  recipient: "judge",
+  summary: "Phase 5: Final evaluation",
+  content: """
+Evaluate ONLY from the fact sheet and opening statements. Ignore advocacy language.
+
+Fact sheet: /tmp/debate-session/phase5/facts.md
+Opening statements: debate-output/phase2/
+
+Issue your judgment:
+1. Winner (which product)
+2. Three decisive factors (cite specific facts)
+3. Runner-up strengths (when it would be the better choice)
+
+Write to: debate-output/phase5/final-judgment.md
+"""
+)
+```
 
 **Forced revision of judgment:** Generate 2-3 devil's advocate concerns, revise if compelling.
 
