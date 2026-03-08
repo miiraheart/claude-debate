@@ -158,7 +158,9 @@ def init_session(query: str, mode: str = "product") -> dict:
 
 
 def detect_domain(query: str) -> str:
-    """Detect query domain from keywords."""
+    """Detect query domain from keywords.
+    Returns 'general' when top 2 domains are within 1 point of each other,
+    letting the judge's persona recommendation take precedence."""
     query_lower = query.lower()
     scores = {}
     for domain, keywords in DOMAIN_KEYWORDS.items():
@@ -167,7 +169,13 @@ def detect_domain(query: str) -> str:
     if not any(scores.values()):
         return "general"
 
-    return max(scores, key=lambda k: scores[k])
+    sorted_domains = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    top_score = sorted_domains[0][1]
+
+    if len(sorted_domains) >= 2 and top_score - sorted_domains[1][1] <= 1:
+        return "general"
+
+    return sorted_domains[0][0]
 
 
 def select_personas(domain: str) -> list[dict]:

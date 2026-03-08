@@ -6,15 +6,25 @@ Reference templates for the debate lead to use when building SendMessage content
 
 ## Context Threading
 
-Passing context cleanly between agents is critical. Follow this discipline:
+Passing context cleanly between agents is critical. Use a hybrid approach to balance completeness with context window limits:
 
-- **Issue tracker:** Always read the latest `debate-output/issue-tracker.md` and include the full contents in every round task (topic mode)
-- **Prior positions:** Read all files from the previous round's output directory; include the full text in task content
-- **Raw embedding:** Always embed the full raw text of prior round outputs in task descriptions — never summarize them yourself. Summarization introduces bias.
-- **Private deliberation notes:** If judge writes private notes, include them in the judge's next task description (not shared with debaters)
-- **Source material paths:** Always include explicit file paths in every task description so agents can read them directly
+### What to always inline
 
-Never summarize prior positions yourself. Pass the raw text. Summarization introduces bias.
+- **Issue tracker:** Always read `debate-output/issue-tracker.md` and embed full contents in every round task
+- **Current round submissions:** Any already-submitted outputs from the current round (so sequential agents see prior submissions)
+- **Private deliberation notes:** Include in the judge's next task only (not shared with debaters)
+- **Source material paths:** Always include explicit file paths so agents can read them directly
+
+### What to inline vs. reference by path
+
+- **Round 2:** Inline round 1 outputs (only one prior round exists — small enough to embed)
+- **Round 3+:** Reference prior rounds by file path only (e.g., "Read prior positions at: debate-output/round-1/, debate-output/round-2/"). Only inline the most recent prior round's outputs.
+
+### Rules
+
+- **Never summarize** — either embed the raw text or provide the file path. Summarization introduces bias.
+- When providing file paths, list every file explicitly (e.g., `debate-output/round-1/agent-1.md`, `debate-output/round-1/agent-2.md`)
+- Agents have `Read` access and can read any file path you provide
 
 ---
 
@@ -76,7 +86,22 @@ PHASE 3 — DEBATE ROUND <R>
 Topic: <TOPIC>
 Your persona: <PERSONA_NAME> — <PERSONA_DESCRIPTION>
 
+[IF R == 1: inline Phase 2 opening statements]
 <RAW_TEXT_OF_ALL_OTHER_AGENTS_PRIOR_POSITIONS>
+
+[IF R == 2: inline round 1 outputs]
+<RAW_TEXT_OF_ROUND_1_OUTPUTS>
+
+[IF R >= 3: reference earlier rounds by path, inline only round R-1]
+Prior rounds (read these files for full context):
+- debate-output/phase3/round-1/agent-1.md
+- ...
+- debate-output/phase3/round-<R-2>/agent-N.md (if R >= 4)
+
+Most recent round positions (round <R-1>):
+---
+<RAW_TEXT_OF_ROUND_R-1_OUTPUTS>
+---
 
 Your task:
 1. Defend your pick against specific criticisms raised in prior rounds
@@ -102,9 +127,23 @@ Issue tracker (current):
 <ISSUE_TRACKER_CONTENTS>
 ---
 
+[IF R == 2: inline round 1 outputs]
 Prior round positions:
 ---
-<PRIOR_ROUND_POSITIONS>
+<RAW_TEXT_OF_ROUND_1_OUTPUTS>
+---
+
+[IF R >= 3: reference prior rounds by path, inline only round R-1]
+Prior rounds (read these files for full context):
+- debate-output/round-1/agent-1.md
+- debate-output/round-1/agent-2.md
+- ...
+- debate-output/round-<R-2>/agent-1.md (if R >= 4)
+- ...
+
+Most recent round positions (round <R-1>):
+---
+<RAW_TEXT_OF_ROUND_R-1_OUTPUTS>
 ---
 
 Your task:
@@ -227,4 +266,8 @@ Structure:
 5. Buy links for all products
 
 Do not inject new opinions. Synthesize what the debate produced.
+
+<synthesize>true</synthesize>
 ```
+
+The `<synthesize>` tag is set by the SKILL.md entry point. When present and `true`, the debate-lead should spawn a synthesizer after the final ruling (topic mode) or after Phase 5 (product mode).

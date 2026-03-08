@@ -10,21 +10,17 @@ tools:
   - WebSearch
   - WebFetch
   - Task
-  - TaskGet
-  - TaskList
-  - TaskUpdate
   - SendMessage
 ---
 
 ## How You Work
 
-1. **Receive assignments** via `SendMessage` from the debate lead. The message content contains your persona, the query, and phase-specific instructions. If a Task was created instead, read it via `TaskGet`.
+1. **Receive assignments** via `SendMessage` from the debate lead. The message content contains your persona, the query, and phase-specific instructions.
 2. **Research first** — no exceptions (see Research Protocol below)
 3. **Produce output** following the phase-specific format for your current phase
 4. **Send results** via `SendMessage(type: "message", recipient: "debate-lead", summary: "...")` — include your full output in the message content
 5. **Write output** to the file path specified in your assignment
-6. **Mark complete** via `TaskUpdate` if a task ID was provided
-7. **Wait** for next assignment via SendMessage
+6. **Wait** for next assignment via SendMessage
 
 You are persona-agnostic by default. Your persona is injected at spawn time via your initial prompt. Apply it consistently throughout all outputs.
 

@@ -161,11 +161,15 @@ Run 2-3 rounds. Word limits decrease each round: 500 → 400 → 300.
 
 **For each round R:**
 
-**Step 1 — Build per-agent context:**
+**Step 1 — Build per-agent context (hybrid approach):**
 
-Read prior round files from `debate-output/phase2/` (round 1) or `debate-output/phase3/round-<R-1>/` (round 2+). For each agent, embed the raw text of all other agents' positions in the SendMessage content. Include the issue tracker contents if available.
+Use hybrid context threading rules:
+- **Round 1:** Inline Phase 2 opening statements (small, essential context)
+- **Round 2:** Inline round 1 outputs (only one prior round)
+- **Round 3+:** Reference rounds 1 through R-2 by file path only; inline only round R-1 outputs
+- **Always inline:** Issue tracker contents if available, private deliberation notes
 
-Do NOT summarize — pass raw text through verbatim.
+Do NOT summarize — either embed raw text or provide file paths.
 
 **Step 1.5 — Private deliberation (rounds 2+ only):**
 
@@ -220,10 +224,11 @@ Write to: debate-output/phase3/round-<R>/agent-<N>.md
 
 After each debate round, send the judge all round output. The judge's evaluation MUST include a `Convergence Assessment` section with a `Recommendation:` line (`continue`, `converged`, or `stalled`).
 
-Parse the judge's `Recommendation:` line from the SendMessage response:
-- `converged` → skip remaining rounds, go to Phase 4
-- `stalled` → skip remaining rounds, go to Phase 4
-- `continue` → proceed to next round
+Parse the judge's response for termination signals. Check **both**:
+1. `Recommendation:` line — `converged` or `stalled` → skip remaining rounds, go to Phase 4; `continue` → next round
+2. `"terminate": true` in JSON — also triggers skip to Phase 4
+
+Either signal is sufficient to end the debate rounds early.
 
 Log:
 
@@ -336,7 +341,43 @@ Send to synthesizer agent with full evidence. Required output:
 5. What the Debate Missed — evidence gaps, market factors, biases
 6. Sources — deduplicated URLs by product
 
-**Step 3 — Spawn synthesizer (if not already a team member).**
+**Step 3 — Spawn synthesizer as a team member:**
+
+```
+Task(
+  subagent_type: "claude-debate:synthesizer",
+  name: "synthesizer",
+  team_name: "debate",
+  prompt: "You are the synthesizer. Follow your agent instructions exactly. Wait for assignments."
+)
+```
+
+Then send the synthesis task via SendMessage:
+
+```
+SendMessage(
+  type: "message",
+  recipient: "synthesizer",
+  summary: "Write final synthesis report",
+  content: """
+SYNTHESIS — Final Report
+
+Read all debate output from: debate-output/
+Final judgment: debate-output/phase5/final-judgment.md
+Phase 2 opening statements: debate-output/phase2/
+
+Write the final synthesis report to: debate-output/final-report.md
+
+Follow your Required Output Structure instructions exactly.
+"""
+)
+```
+
+Log:
+
+```bash
+echo "[$(date '+%H:%M:%S')] HANDOVER — Synthesizer spawned for product mode" >> debate-output/debate.log
+```
 
 **3-level fallback:**
 1. Primary: synthesizer completes with all sections

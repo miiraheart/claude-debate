@@ -105,9 +105,16 @@ Write your round evaluation to: debate-output/evaluations/round-1.md
 )
 ```
 
-Log:
+After each agent writes their file, log immediately:
 
 ```bash
+echo "[$(date '+%H:%M:%S')] WRITTEN — debate-output/round-1/agent-<N>.md submitted" >> debate-output/debate.log
+```
+
+After judge creates the tracker:
+
+```bash
+echo "[$(date '+%H:%M:%S')] TRACKER — Round 1 created. Resolved: 0, Open: N, Stalled: 0" >> debate-output/debate.log
 echo "[$(date '+%H:%M:%S')] ROUND — Round 1 complete. Issue tracker created." >> debate-output/debate.log
 ```
 
@@ -127,12 +134,13 @@ Determine the ordering from the judge's persona list:
 
 **For each agent in the sequential order:**
 
-**Step 1 — Build this agent's context:**
+**Step 1 — Build this agent's context (hybrid approach):**
 
-Read prior round files and any already-submitted files from this round. For context, include:
-- All other agents' prior positions AND any already-submitted positions from this round
-- Their own prior position for reference
-- The current issue tracker contents
+Read prior round files and any already-submitted files from this round. Use hybrid context threading:
+- **Round 2:** Inline round 1 outputs (only one prior round — small enough to embed)
+- **Round 3+:** Reference rounds 1 through R-2 by file path only; inline only round R-1 outputs
+- **Always inline:** Current round's already-submitted outputs, issue tracker contents, their own prior position
+- **Never summarize** — either embed raw text or provide file paths
 
 Do NOT summarize — pass raw text through verbatim.
 
@@ -155,9 +163,21 @@ Issue tracker (current):
 <READ_AND_EMBED_ISSUE_TRACKER_CONTENTS>
 ---
 
+[IF R == 2: inline round 1 outputs]
 Prior round positions:
 ---
-<READ_AND_EMBED_ALL_PRIOR_ROUND_FILES>
+<READ_AND_EMBED_ROUND_1_FILES>
+---
+
+[IF R >= 3: reference earlier rounds by path, inline only round R-1]
+Prior rounds (read these files for full context):
+- debate-output/round-1/agent-1.md
+- debate-output/round-1/agent-2.md
+- ... (list all prior round files through round R-2)
+
+Most recent round positions (round <R-1>):
+---
+<READ_AND_EMBED_ROUND_R-1_FILES>
 ---
 
 Already submitted this round:
@@ -178,6 +198,12 @@ Max 400 words.
 ```
 
 Wait for this agent to respond and write their file before proceeding to the next agent in the sequence.
+
+After each agent writes, log:
+
+```bash
+echo "[$(date '+%H:%M:%S')] WRITTEN — debate-output/round-<R>/agent-<N>.md submitted" >> debate-output/debate.log
+```
 
 **Step 3 — Judge evaluates and updates tracker:**
 
@@ -205,12 +231,24 @@ If you believe the debate has reached sufficient resolution before the final rou
 
 **Step 4 — Check for early termination:**
 
+After judge updates the tracker, log:
+
+```bash
+echo "[$(date '+%H:%M:%S')] TRACKER — Round <R> updated. Resolved: N, Open: N, Stalled: N" >> debate-output/debate.log
+```
+
 Parse judge's response. If `"terminate": true` is present, stop rounds and proceed to Final Round immediately.
 
 Log each round:
 
 ```bash
 echo "[$(date '+%H:%M:%S')] ROUND — Round <R>/<TOTAL> complete. Terminate: <YES/NO>" >> debate-output/debate.log
+```
+
+If early termination:
+
+```bash
+echo "[$(date '+%H:%M:%S')] ROUND — Early termination triggered by judge at round <R>" >> debate-output/debate.log
 ```
 
 ---
@@ -247,3 +285,49 @@ Log:
 ```bash
 echo "[$(date '+%H:%M:%S')] RULING — Final ruling received. Writing complete." >> debate-output/debate.log
 ```
+
+---
+
+## Optional: Post-Ruling Synthesis
+
+Check whether the original spawn included a `<synthesize>true</synthesize>` tag. If so, spawn a synthesizer to produce a final synthesis document.
+
+**Step 1 — Spawn synthesizer as a team member:**
+
+```
+Task(
+  subagent_type: "claude-debate:synthesizer",
+  name: "synthesizer",
+  team_name: "debate",
+  prompt: "You are the synthesizer. Follow your agent instructions exactly. Wait for assignments."
+)
+```
+
+**Step 2 — Send synthesis task:**
+
+```
+SendMessage(
+  type: "message",
+  recipient: "synthesizer",
+  summary: "Synthesize topic debate",
+  content: """
+TOPIC MODE SYNTHESIS
+
+Read all debate output from: debate-output/
+Read the final ruling: debate-output/final-ruling.md
+Read the issue tracker: debate-output/issue-tracker.md
+
+Write a synthesis report to: debate-output/synthesis.md
+
+Follow your Topic Mode Synthesis instructions. Synthesize only what the debate and judge produced — no new analysis.
+"""
+)
+```
+
+Log:
+
+```bash
+echo "[$(date '+%H:%M:%S')] HANDOVER — Synthesis spawned for topic mode" >> debate-output/debate.log
+```
+
+If synthesis was not requested (no `<synthesize>` tag or `<synthesize>false</synthesize>`), skip this section entirely.

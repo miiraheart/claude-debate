@@ -163,6 +163,39 @@ debate-output/                          (primary output)
 
 ---
 
+## Topic Synthesis Structure
+
+When `--synthesize` is used with a topic debate, the synthesizer produces `debate-output/synthesis.md`:
+
+```markdown
+## Synthesis
+
+### Executive Summary
+[1-2 paragraphs: the core question, what the debate revealed, and the judge's ruling in brief]
+
+### Arguments Accepted
+[Arguments the judge accepted, with the evidence that was decisive]
+
+### Arguments Rejected
+[Arguments the judge rejected, with reasoning]
+
+### Points of Agreement
+[Claims all sides converged on during the debate]
+
+### Unresolved Disagreements
+[Issues where neither side prevailed — why they remain open]
+
+### Strength Assessment
+| Agent | Evidence Quality | Logical Consistency | Responsiveness | Overall |
+|-------|-----------------|--------------------:|----------------|---------|
+| [A]   | /10             | /10                 | /10            | /10     |
+
+### Sources
+[Deduplicated list of all URLs cited, organized by agent]
+```
+
+---
+
 ## Formatting Guidelines
 
 - Clear markdown headers for structure

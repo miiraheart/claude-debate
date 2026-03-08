@@ -53,10 +53,30 @@ def extract_vote(text: str) -> dict:
     return result
 
 
-def collect_votes(vote_dir: str) -> tuple[dict, dict]:
+def _is_same_product(a: str, b: str) -> bool:
+    """Check if two product names refer to the same product using normalization."""
+    na = re.sub(r'\*+', '', a).strip().lower()
+    nb = re.sub(r'\*+', '', b).strip().lower()
+    if na == nb:
+        return True
+    if na in nb or nb in na:
+        return True
+    words_a = set(na.split())
+    words_b = set(nb.split())
+    if not words_a or not words_b:
+        return False
+    overlap = len(words_a & words_b) / min(len(words_a), len(words_b))
+    return overlap >= 0.7
+
+
+def collect_votes(vote_dir: str, agent_picks: dict | None = None) -> tuple[dict, dict]:
     """
     Read all vote files and tally votes.
-    Adapted from elimination_game voting.py (analysis.md:785-807).
+
+    Args:
+        vote_dir: Directory containing vote-agent-*.md files
+        agent_picks: Optional map of {agent_id: product_name} for self-vote validation.
+                     If an agent votes to eliminate their own pick, the vote is skipped.
 
     Returns:
         votes: {target_product: vote_count}
@@ -74,7 +94,17 @@ def collect_votes(vote_dir: str) -> tuple[dict, dict]:
         vote = extract_vote(text)
 
         if vote["target"]:
-            # Normalize product name for counting
+            # Self-vote validation: skip if agent votes for their own pick
+            if agent_picks:
+                own_pick = agent_picks.get(agent_id, "")
+                if own_pick and _is_same_product(vote["target"], own_pick):
+                    vote_details[agent_id] = {
+                        "target": vote["target"],
+                        "skipped": True,
+                        "reason": "Self-vote detected — agent voted to eliminate their own pick",
+                    }
+                    continue
+
             normalized = vote["target"].lower().strip()
             votes[normalized] += 1
             vote_details[agent_id] = {
@@ -111,6 +141,18 @@ def resolve_elimination(
     """
     if not votes:
         return {"error": "No valid votes cast", "eliminated": None}
+
+    # Fast-path: unanimous vote (only one target received any votes)
+    if len(votes) == 1:
+        target = next(iter(votes))
+        return {
+            "eliminated": target,
+            "vote_count": votes[target],
+            "total_votes": votes[target],
+            "tie_break": False,
+            "method": "unanimous",
+            "vote_distribution": votes,
+        }
 
     max_votes = max(votes.values())
     leaders = [product for product, count in votes.items() if count == max_votes]
@@ -182,9 +224,13 @@ def resolve_elimination(
     }
 
 
-def run_elimination(vote_dir: str, cumulative_votes: dict | None = None) -> dict:
+def run_elimination(
+    vote_dir: str,
+    cumulative_votes: dict | None = None,
+    agent_picks: dict | None = None,
+) -> dict:
     """Full elimination pipeline: collect votes -> resolve -> output."""
-    votes, vote_details = collect_votes(vote_dir)
+    votes, vote_details = collect_votes(vote_dir, agent_picks=agent_picks)
     result = resolve_elimination(votes, vote_details, cumulative_votes)
     result["vote_details"] = vote_details
     return result
@@ -192,20 +238,28 @@ def run_elimination(vote_dir: str, cumulative_votes: dict | None = None) -> dict
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 vote_tallier.py <vote_directory> [--cumulative '{json}' | cumulative_votes.json]")
+        print("Usage: python3 vote_tallier.py <vote_directory> [--cumulative '{json}'] [--picks '{json}']")
         sys.exit(1)
 
     vote_dir = sys.argv[1]
     cumulative = None
-    for i, arg in enumerate(sys.argv[2:], 2):
-        if arg == "--cumulative" and i + 1 < len(sys.argv):
+    picks = None
+    i = 2
+    while i < len(sys.argv):
+        if sys.argv[i] == "--cumulative" and i + 1 < len(sys.argv):
             cumulative = json.loads(sys.argv[i + 1])
-            break
-        elif not arg.startswith("--"):
-            cumulative = json.loads(Path(arg).read_text())
-            break
+            i += 2
+        elif sys.argv[i] == "--picks" and i + 1 < len(sys.argv):
+            picks = json.loads(sys.argv[i + 1])
+            i += 2
+        else:
+            if not sys.argv[i].startswith("--"):
+                cumulative = json.loads(Path(sys.argv[i]).read_text())
+            i += 1
 
-    result = run_elimination(vote_dir, cumulative)
+    votes, vote_details = collect_votes(vote_dir, agent_picks=picks)
+    result = resolve_elimination(votes, vote_details, cumulative)
+    result["vote_details"] = vote_details
 
     # Write result
     output_path = Path(vote_dir) / "elimination-results.json"

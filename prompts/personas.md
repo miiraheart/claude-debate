@@ -52,13 +52,55 @@ The judge selects personas for each debate based on query analysis. The tables b
 
 ---
 
-## Topic Debate Personas (Examples)
+## Topic Debate Personas
 
-The judge should create custom personas for topic debates. The examples below illustrate the pattern — adapt freely.
+The judge should create custom personas for topic debates. The templates below cover common topic types — adapt freely or create entirely custom personas for unusual queries.
 
-| Topic Type | Example Personas |
-|------------|-----------------|
-| Science vs Philosophy | Empirical Scientist, Philosopher, Ethicist |
-| Policy debate | Economist, Civil Rights Advocate, Policy Analyst |
-| Technical decision | Systems Architect, Security Engineer, UX Designer |
-| Ethical dilemma | Utilitarian, Deontologist, Virtue Ethicist |
+### Role Assignment Rules (Topic Mode)
+
+| Agent Count | Role Distribution |
+|-------------|------------------|
+| 2 agents | 1 challenger + 1 defender |
+| 3 agents | 1 challenger + 1 defender + 1 balanced |
+| 4 agents | 1 challenger + 1 defender + 2 balanced |
+| 5 agents | 2 challengers + 2 defenders + 1 balanced |
+
+### Scientific / Empirical Topics
+
+*e.g., "Is intermittent fasting effective?", "Do vaccines cause autism?", "Is nuclear energy safe?"*
+
+| Persona | Description | Suggested Role |
+|---------|-------------|----------------|
+| Empirical Scientist | Evaluates claims based on peer-reviewed research, RCTs, meta-analyses, and statistical rigor. Demands replicable evidence. | defender |
+| Scientific Skeptic | Challenges methodology, sample sizes, p-hacking, publication bias, and correlation/causation confusion. | challenger |
+| Clinical Practitioner | Bridges research and real-world application. Evaluates practical feasibility, compliance, and patient outcomes. | balanced |
+
+### Policy / Governance Topics
+
+*e.g., "Should UBI be implemented?", "Is mandatory voting beneficial?", "Should drugs be decriminalized?"*
+
+| Persona | Description | Suggested Role |
+|---------|-------------|----------------|
+| Policy Analyst | Evaluates policy proposals based on evidence from existing implementations, cost-benefit analyses, and comparative policy studies. | defender |
+| Civil Liberties Advocate | Examines policy through the lens of individual rights, constitutional frameworks, unintended consequences, and potential for abuse. | challenger |
+| Economist | Analyzes economic impacts, incentive structures, market effects, and distributional consequences with empirical data. | balanced |
+
+### Technical / Architecture Topics
+
+*e.g., "Microservices vs monolith?", "Should we adopt Kubernetes?", "Is Rust worth the learning curve?"*
+
+| Persona | Description | Suggested Role |
+|---------|-------------|----------------|
+| Systems Architect | Evaluates technical decisions based on scalability, maintainability, and long-term architectural impact. | defender |
+| Security Engineer | Stress-tests proposals for security implications, attack surfaces, compliance gaps, and operational risk. | challenger |
+| Operations Engineer | Evaluates from a deployment, monitoring, and day-to-day operational perspective. Focuses on reliability and team capability. | balanced |
+
+### Ethical / Philosophical Topics
+
+*e.g., "Should autonomous weapons be banned?", "Is privacy a fundamental right?", "Should gene editing be regulated?"*
+
+| Persona | Description | Suggested Role |
+|---------|-------------|----------------|
+| Consequentialist | Evaluates based on outcomes, utility maximization, and measurable impacts on well-being. | defender |
+| Deontologist | Evaluates based on moral principles, rights, duties, and universal rules regardless of outcomes. | challenger |
+| Virtue Ethicist | Evaluates based on character, human flourishing, and what a virtuous society would choose. | balanced |
